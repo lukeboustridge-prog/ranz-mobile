@@ -27,3 +27,7 @@ export type { Annotation, AnnotationTool, Point } from "./PhotoAnnotator";
 
 // Video Capture
 export { VideoCapture } from "./VideoCapture";
+
+// Barcode Scanner
+export { BarcodeScanner } from "./BarcodeScanner";
+export type { ScannedBarcode, BarcodeType } from "./BarcodeScanner";
