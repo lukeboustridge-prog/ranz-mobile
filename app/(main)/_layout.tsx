@@ -18,6 +18,12 @@ export default function MainLayout() {
       <Stack.Screen name="report-detail/[id]" />
       <Stack.Screen name="photo-capture" />
       <Stack.Screen name="compliance-assessment" />
+      <Stack.Screen name="defects/index" />
+      <Stack.Screen name="defects/new" />
+      <Stack.Screen name="defects/[id]" />
+      <Stack.Screen name="elements/index" />
+      <Stack.Screen name="elements/new" />
+      <Stack.Screen name="elements/[id]" />
     </Stack>
   );
 }

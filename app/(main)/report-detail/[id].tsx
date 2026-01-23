@@ -14,15 +14,17 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useLocalDB } from "../../../src/hooks/useLocalDB";
-import type { LocalReport, LocalPhoto } from "../../../src/types/database";
+import type { LocalReport, LocalPhoto, LocalDefect, LocalRoofElement } from "../../../src/types/database";
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { getReport, getPhotos } = useLocalDB();
+  const { getReport, getPhotos, getDefects, getRoofElements } = useLocalDB();
 
   const [report, setReport] = useState<LocalReport | null>(null);
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
+  const [defects, setDefects] = useState<LocalDefect[]>([]);
+  const [elements, setElements] = useState<LocalRoofElement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -39,8 +41,14 @@ export default function ReportDetailScreen() {
       setReport(loadedReport);
 
       if (loadedReport) {
-        const loadedPhotos = await getPhotos(id!);
+        const [loadedPhotos, loadedDefects, loadedElements] = await Promise.all([
+          getPhotos(id!),
+          getDefects(id!),
+          getRoofElements(id!),
+        ]);
         setPhotos(loadedPhotos);
+        setDefects(loadedDefects);
+        setElements(loadedElements);
       }
     } catch (error) {
       console.error("Failed to load report:", error);
@@ -162,11 +170,11 @@ export default function ReportDetailScreen() {
           <Text style={styles.statLabel}>Photos</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{defects.length}</Text>
           <Text style={styles.statLabel}>Defects</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statNumber}>0</Text>
+          <Text style={styles.statNumber}>{elements.length}</Text>
           <Text style={styles.statLabel}>Elements</Text>
         </View>
       </View>
@@ -254,20 +262,32 @@ export default function ReportDetailScreen() {
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => router.push({
+            pathname: "/(main)/defects",
+            params: { reportId: id || "" }
+          } as any)}
+        >
           <Text style={styles.actionIcon}>🔍</Text>
           <View style={styles.actionContent}>
             <Text style={styles.actionTitle}>Document Defects</Text>
-            <Text style={styles.actionSubtitle}>0 defects recorded</Text>
+            <Text style={styles.actionSubtitle}>{defects.length} defects recorded</Text>
           </View>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => router.push({
+            pathname: "/(main)/elements",
+            params: { reportId: id || "" }
+          } as any)}
+        >
           <Text style={styles.actionIcon}>🏠</Text>
           <View style={styles.actionContent}>
             <Text style={styles.actionTitle}>Roof Elements</Text>
-            <Text style={styles.actionSubtitle}>0 elements documented</Text>
+            <Text style={styles.actionSubtitle}>{elements.length} elements documented</Text>
           </View>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>

@@ -922,6 +922,18 @@ export async function getDatabaseStats(): Promise<{
 }
 
 /**
+ * Mark a report as dirty (needs sync) when related data changes
+ */
+export async function markReportDirty(reportId: string): Promise<void> {
+  const database = getDatabase();
+  const now = new Date().toISOString();
+  await database.runAsync(
+    `UPDATE reports SET sync_status = 'pending', updated_at = ? WHERE id = ?`,
+    [now, reportId]
+  );
+}
+
+/**
  * Get a full report with all related data
  */
 export async function getReportWithRelations(reportId: string): Promise<{
