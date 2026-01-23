@@ -520,9 +520,9 @@ export async function savePhoto(photo: LocalPhoto): Promise<void> {
       local_uri, thumbnail_uri, filename, original_filename, mime_type, file_size,
       photo_type, quick_tag, captured_at, gps_lat, gps_lng, gps_altitude, gps_accuracy,
       camera_make, camera_model, exposure_time, f_number, iso, focal_length,
-      original_hash, caption, sort_order,
+      original_hash, annotations_json, annotated_uri, caption, sort_order,
       sync_status, uploaded_url, synced_at, last_sync_error, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       photo.id,
       photo.reportId,
@@ -548,6 +548,8 @@ export async function savePhoto(photo: LocalPhoto): Promise<void> {
       photo.iso,
       photo.focalLength,
       photo.originalHash,
+      photo.annotationsJson,
+      photo.annotatedUri,
       photo.caption,
       photo.sortOrder,
       photo.syncStatus,
@@ -608,6 +610,29 @@ export async function deletePhoto(id: string): Promise<void> {
   await database.runAsync("DELETE FROM photos WHERE id = ?", [id]);
 }
 
+export async function updatePhotoAnnotations(
+  id: string,
+  annotationsJson: string,
+  annotatedUri: string
+): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `UPDATE photos SET annotations_json = ?, annotated_uri = ?, sync_status = 'pending' WHERE id = ?`,
+    [annotationsJson, annotatedUri, id]
+  );
+}
+
+export async function getPhotoById(id: string): Promise<LocalPhoto | null> {
+  const database = getDatabase();
+  const result = await database.getFirstAsync<Record<string, unknown>>(
+    "SELECT * FROM photos WHERE id = ?",
+    [id]
+  );
+
+  if (!result) return null;
+  return mapPhotoRow(result);
+}
+
 /**
  * Link a photo to a defect after the defect is saved
  */
@@ -658,6 +683,8 @@ function mapPhotoRow(row: Record<string, unknown>): LocalPhoto {
     iso: row.iso as number | null,
     focalLength: row.focal_length as number | null,
     originalHash: row.original_hash as string,
+    annotationsJson: row.annotations_json as string | null,
+    annotatedUri: row.annotated_uri as string | null,
     caption: row.caption as string | null,
     sortOrder: row.sort_order as number,
     syncStatus: row.sync_status as LocalPhoto["syncStatus"],

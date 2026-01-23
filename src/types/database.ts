@@ -171,6 +171,10 @@ export interface LocalPhoto {
   // Evidence integrity
   originalHash: string;
 
+  // Annotations
+  annotationsJson: string | null;
+  annotatedUri: string | null;
+
   caption: string | null;
   sortOrder: number;
 
@@ -268,7 +272,7 @@ export interface LocalVoiceNote {
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 4; // Incremented for schema changes (v4: added voice_notes table)
+export const DATABASE_VERSION = 5; // Incremented for schema changes (v5: added annotations to photos)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -433,6 +437,10 @@ CREATE TABLE IF NOT EXISTS photos (
 
   -- Evidence integrity
   original_hash TEXT NOT NULL,
+
+  -- Annotations
+  annotations_json TEXT,
+  annotated_uri TEXT,
 
   caption TEXT,
   sort_order INTEGER DEFAULT 0,
@@ -619,6 +627,14 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX IF NOT EXISTS idx_voice_notes_report_id ON voice_notes(report_id);
       CREATE INDEX IF NOT EXISTS idx_voice_notes_defect_id ON voice_notes(defect_id);
       CREATE INDEX IF NOT EXISTS idx_voice_notes_sync_status ON voice_notes(sync_status);
+    `,
+  },
+  {
+    version: 5,
+    sql: `
+      -- Migration from v4 to v5: Add annotations columns to photos
+      ALTER TABLE photos ADD COLUMN annotations_json TEXT;
+      ALTER TABLE photos ADD COLUMN annotated_uri TEXT;
     `,
   },
 ];

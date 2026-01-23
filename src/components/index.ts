@@ -20,3 +20,7 @@ export type { RoofElementOption } from "./CameraCapture";
 
 // Voice Notes
 export { VoiceNoteRecorder } from "./VoiceNoteRecorder";
+
+// Photo Annotation
+export { PhotoAnnotator } from "./PhotoAnnotator";
+export type { Annotation, AnnotationTool, Point } from "./PhotoAnnotator";

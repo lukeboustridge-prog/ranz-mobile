@@ -335,6 +335,8 @@ class PhotoService {
         iso: photo.exif?.ISO ?? null,
         focalLength: photo.exif?.FocalLength ?? null,
         originalHash,
+        annotationsJson: null,
+        annotatedUri: null,
         caption: null,
         sortOrder: 0,
         syncStatus: "captured",
