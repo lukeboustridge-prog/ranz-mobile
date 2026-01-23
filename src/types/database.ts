@@ -10,6 +10,7 @@ import type {
   PropertyType,
   ReportStatus,
   PhotoType,
+  QuickTag,
   DefectClass,
   DefectSeverity,
   PriorityLevel,
@@ -152,6 +153,7 @@ export interface LocalPhoto {
   fileSize: number;
 
   photoType: PhotoType;
+  quickTag: QuickTag | null;
 
   // EXIF Metadata (captured at moment of photo)
   capturedAt: string | null;
@@ -235,12 +237,38 @@ export interface LocalSyncState {
   deviceId: string;
 }
 
+export interface LocalVoiceNote {
+  id: string;
+  reportId: string;
+  defectId: string | null;
+  roofElementId: string | null;
+
+  // File info
+  localUri: string;
+  filename: string;
+  mimeType: string;
+  fileSize: number;
+  durationMs: number;
+
+  // Metadata
+  recordedAt: string;
+  transcription: string | null;
+
+  // Sync tracking
+  syncStatus: SyncStatus;
+  uploadedUrl: string | null;
+  syncedAt: string | null;
+  lastSyncError: string | null;
+
+  createdAt: string;
+}
+
 // ============================================
 // DATABASE SCHEMA CREATION
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 2; // Incremented for schema changes
+export const DATABASE_VERSION = 4; // Incremented for schema changes (v4: added voice_notes table)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -388,6 +416,7 @@ CREATE TABLE IF NOT EXISTS photos (
   file_size INTEGER NOT NULL,
 
   photo_type TEXT NOT NULL,
+  quick_tag TEXT,
 
   -- EXIF Metadata (critical for evidence)
   captured_at TEXT,
@@ -410,6 +439,37 @@ CREATE TABLE IF NOT EXISTS photos (
 
   -- Sync tracking
   sync_status TEXT NOT NULL DEFAULT 'captured',
+  uploaded_url TEXT,
+  synced_at TEXT,
+  last_sync_error TEXT,
+
+  created_at TEXT NOT NULL,
+
+  FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+  FOREIGN KEY (defect_id) REFERENCES defects(id) ON DELETE SET NULL,
+  FOREIGN KEY (roof_element_id) REFERENCES roof_elements(id) ON DELETE SET NULL
+);
+
+-- Voice Notes (audio recordings for observations)
+CREATE TABLE IF NOT EXISTS voice_notes (
+  id TEXT PRIMARY KEY,
+  report_id TEXT NOT NULL,
+  defect_id TEXT,
+  roof_element_id TEXT,
+
+  -- File info
+  local_uri TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  duration_ms INTEGER NOT NULL,
+
+  -- Metadata
+  recorded_at TEXT NOT NULL,
+  transcription TEXT,
+
+  -- Sync tracking
+  sync_status TEXT NOT NULL DEFAULT 'draft',
   uploaded_url TEXT,
   synced_at TEXT,
   last_sync_error TEXT,
@@ -493,6 +553,10 @@ CREATE INDEX IF NOT EXISTS idx_photos_defect_id ON photos(defect_id);
 CREATE INDEX IF NOT EXISTS idx_photos_roof_element_id ON photos(roof_element_id);
 CREATE INDEX IF NOT EXISTS idx_photos_sync_status ON photos(sync_status);
 
+CREATE INDEX IF NOT EXISTS idx_voice_notes_report_id ON voice_notes(report_id);
+CREATE INDEX IF NOT EXISTS idx_voice_notes_defect_id ON voice_notes(defect_id);
+CREATE INDEX IF NOT EXISTS idx_voice_notes_sync_status ON voice_notes(sync_status);
+
 CREATE INDEX IF NOT EXISTS idx_compliance_report_id ON compliance_assessments(report_id);
 
 CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id);
@@ -518,6 +582,43 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       DROP TABLE IF EXISTS compliance_results;
 
       -- Rename indices if needed (handled by CREATE IF NOT EXISTS above)
+    `,
+  },
+  {
+    version: 3,
+    sql: `
+      -- Migration from v2 to v3: Add quick_tag column to photos
+      ALTER TABLE photos ADD COLUMN quick_tag TEXT;
+    `,
+  },
+  {
+    version: 4,
+    sql: `
+      -- Migration from v3 to v4: Add voice_notes table
+      CREATE TABLE IF NOT EXISTS voice_notes (
+        id TEXT PRIMARY KEY,
+        report_id TEXT NOT NULL,
+        defect_id TEXT,
+        roof_element_id TEXT,
+        local_uri TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        recorded_at TEXT NOT NULL,
+        transcription TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'draft',
+        uploaded_url TEXT,
+        synced_at TEXT,
+        last_sync_error TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+        FOREIGN KEY (defect_id) REFERENCES defects(id) ON DELETE SET NULL,
+        FOREIGN KEY (roof_element_id) REFERENCES roof_elements(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_voice_notes_report_id ON voice_notes(report_id);
+      CREATE INDEX IF NOT EXISTS idx_voice_notes_defect_id ON voice_notes(defect_id);
+      CREATE INDEX IF NOT EXISTS idx_voice_notes_sync_status ON voice_notes(sync_status);
     `,
   },
 ];

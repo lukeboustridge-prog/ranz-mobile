@@ -18,6 +18,7 @@ import {
   type LocalPhoto,
   type LocalDefect,
   type LocalRoofElement,
+  type LocalVoiceNote,
   type LocalComplianceAssessment,
   type LocalChecklist,
   type LocalTemplate,
@@ -517,11 +518,11 @@ export async function savePhoto(photo: LocalPhoto): Promise<void> {
     `INSERT OR REPLACE INTO photos (
       id, report_id, defect_id, roof_element_id,
       local_uri, thumbnail_uri, filename, original_filename, mime_type, file_size,
-      photo_type, captured_at, gps_lat, gps_lng, gps_altitude, gps_accuracy,
+      photo_type, quick_tag, captured_at, gps_lat, gps_lng, gps_altitude, gps_accuracy,
       camera_make, camera_model, exposure_time, f_number, iso, focal_length,
       original_hash, caption, sort_order,
       sync_status, uploaded_url, synced_at, last_sync_error, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       photo.id,
       photo.reportId,
@@ -534,6 +535,7 @@ export async function savePhoto(photo: LocalPhoto): Promise<void> {
       photo.mimeType,
       photo.fileSize,
       photo.photoType,
+      photo.quickTag,
       photo.capturedAt,
       photo.gpsLat,
       photo.gpsLng,
@@ -643,6 +645,7 @@ function mapPhotoRow(row: Record<string, unknown>): LocalPhoto {
     mimeType: row.mime_type as string,
     fileSize: row.file_size as number,
     photoType: row.photo_type as LocalPhoto["photoType"],
+    quickTag: row.quick_tag as LocalPhoto["quickTag"],
     capturedAt: row.captured_at as string | null,
     gpsLat: row.gps_lat as number | null,
     gpsLng: row.gps_lng as number | null,
@@ -658,6 +661,97 @@ function mapPhotoRow(row: Record<string, unknown>): LocalPhoto {
     caption: row.caption as string | null,
     sortOrder: row.sort_order as number,
     syncStatus: row.sync_status as LocalPhoto["syncStatus"],
+    uploadedUrl: row.uploaded_url as string | null,
+    syncedAt: row.synced_at as string | null,
+    lastSyncError: row.last_sync_error as string | null,
+    createdAt: row.created_at as string,
+  };
+}
+
+// ============================================
+// VOICE NOTE OPERATIONS
+// ============================================
+
+export async function saveVoiceNote(voiceNote: LocalVoiceNote): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `INSERT OR REPLACE INTO voice_notes (
+      id, report_id, defect_id, roof_element_id,
+      local_uri, filename, mime_type, file_size, duration_ms,
+      recorded_at, transcription,
+      sync_status, uploaded_url, synced_at, last_sync_error, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      voiceNote.id,
+      voiceNote.reportId,
+      voiceNote.defectId,
+      voiceNote.roofElementId,
+      voiceNote.localUri,
+      voiceNote.filename,
+      voiceNote.mimeType,
+      voiceNote.fileSize,
+      voiceNote.durationMs,
+      voiceNote.recordedAt,
+      voiceNote.transcription,
+      voiceNote.syncStatus,
+      voiceNote.uploadedUrl,
+      voiceNote.syncedAt,
+      voiceNote.lastSyncError,
+      voiceNote.createdAt,
+    ]
+  );
+}
+
+export async function getVoiceNotesForReport(reportId: string): Promise<LocalVoiceNote[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    "SELECT * FROM voice_notes WHERE report_id = ? ORDER BY recorded_at ASC",
+    [reportId]
+  );
+
+  return results.map(mapVoiceNoteRow);
+}
+
+export async function getVoiceNotesForDefect(defectId: string): Promise<LocalVoiceNote[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    "SELECT * FROM voice_notes WHERE defect_id = ? ORDER BY recorded_at ASC",
+    [defectId]
+  );
+
+  return results.map(mapVoiceNoteRow);
+}
+
+export async function deleteVoiceNote(id: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync("DELETE FROM voice_notes WHERE id = ?", [id]);
+}
+
+export async function updateVoiceNoteTranscription(
+  id: string,
+  transcription: string
+): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    "UPDATE voice_notes SET transcription = ? WHERE id = ?",
+    [transcription, id]
+  );
+}
+
+function mapVoiceNoteRow(row: Record<string, unknown>): LocalVoiceNote {
+  return {
+    id: row.id as string,
+    reportId: row.report_id as string,
+    defectId: row.defect_id as string | null,
+    roofElementId: row.roof_element_id as string | null,
+    localUri: row.local_uri as string,
+    filename: row.filename as string,
+    mimeType: row.mime_type as string,
+    fileSize: row.file_size as number,
+    durationMs: row.duration_ms as number,
+    recordedAt: row.recorded_at as string,
+    transcription: row.transcription as string | null,
+    syncStatus: row.sync_status as LocalVoiceNote["syncStatus"],
     uploadedUrl: row.uploaded_url as string | null,
     syncedAt: row.synced_at as string | null,
     lastSyncError: row.last_sync_error as string | null,

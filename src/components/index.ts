@@ -13,3 +13,10 @@ export { ChipSelector } from "./ChipSelector";
 export type { ChipOption } from "./ChipSelector";
 export { FormSection } from "./FormSection";
 export { PhotoGrid } from "./PhotoGrid";
+
+// Camera
+export { CameraCapture } from "./CameraCapture";
+export type { RoofElementOption } from "./CameraCapture";
+
+// Voice Notes
+export { VoiceNoteRecorder } from "./VoiceNoteRecorder";

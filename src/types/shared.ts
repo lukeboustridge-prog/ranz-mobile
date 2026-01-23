@@ -101,6 +101,12 @@ export enum PhotoType {
   GENERAL = "GENERAL",
 }
 
+export enum QuickTag {
+  DEFECT = "DEFECT",
+  GOOD = "GOOD",
+  INACCESSIBLE = "INACCESSIBLE",
+}
+
 export enum ComplianceStatus {
   PASS = "PASS",
   FAIL = "FAIL",

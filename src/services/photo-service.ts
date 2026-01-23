@@ -18,7 +18,7 @@ import * as Crypto from "expo-crypto";
 import { savePhoto, getPhotosForReport, addToSyncQueue } from "../lib/sqlite";
 import { getOrCreateDeviceId } from "../lib/storage";
 import type { LocalPhoto } from "../types/database";
-import type { PhotoType } from "../types/shared";
+import type { PhotoType, QuickTag } from "../types/shared";
 
 // ============================================
 // TYPES
@@ -28,6 +28,7 @@ export interface PhotoMetadata {
   id: string;
   reportId: string;
   photoType: PhotoType;
+  quickTag: QuickTag | null;
   timestamp: string;
   gpsLat: number | null;
   gpsLng: number | null;
@@ -213,7 +214,8 @@ class PhotoService {
     photoType: PhotoType,
     reportId: string,
     defectId?: string,
-    roofElementId?: string
+    roofElementId?: string,
+    quickTag?: QuickTag
   ): Promise<CaptureResult> {
     try {
       this.emitProgress("Preparing capture...");
@@ -288,6 +290,7 @@ class PhotoService {
         id,
         reportId,
         photoType,
+        quickTag: quickTag ?? null,
         timestamp,
         gpsLat: gpsData?.latitude ?? null,
         gpsLng: gpsData?.longitude ?? null,
@@ -319,6 +322,7 @@ class PhotoService {
         mimeType: "image/jpeg",
         fileSize,
         photoType,
+        quickTag: quickTag ?? null,
         capturedAt: timestamp,
         gpsLat: gpsData?.latitude ?? null,
         gpsLng: gpsData?.longitude ?? null,
@@ -387,6 +391,7 @@ class PhotoService {
       id: p.id,
       reportId: p.reportId,
       photoType: p.photoType as PhotoType,
+      quickTag: p.quickTag as QuickTag | null,
       timestamp: p.capturedAt || p.createdAt,
       gpsLat: p.gpsLat,
       gpsLng: p.gpsLng,

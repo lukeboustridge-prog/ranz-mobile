@@ -1,6 +1,6 @@
 /**
  * CameraCapture Component
- * Full-screen camera with GPS overlay and photo type selection
+ * Full-screen camera with GPS overlay, photo type selection, quick tags, and element selector
  */
 
 import React, { useState, useRef, useEffect } from "react";
@@ -11,6 +11,9 @@ import {
   StyleSheet,
   SafeAreaView,
   Dimensions,
+  ScrollView,
+  Modal,
+  FlatList,
 } from "react-native";
 import { CameraView, CameraType, FlashMode } from "expo-camera";
 import {
@@ -20,15 +23,22 @@ import {
   getCurrentLocation,
   getGPSAccuracyStatus,
 } from "../services/photo-service";
-import { PhotoType } from "../types/shared";
+import { PhotoType, QuickTag, ElementType } from "../types/shared";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
+
+export interface RoofElementOption {
+  id: string;
+  elementType: ElementType;
+  location: string;
+}
 
 interface CameraCaptureProps {
   reportId: string;
   defectId?: string;
   roofElementId?: string;
-  onCapture: (photoId: string) => void;
+  roofElements?: RoofElementOption[];
+  onCapture: (photoId: string, quickTag?: QuickTag, elementId?: string) => void;
   onClose: () => void;
 }
 
@@ -39,10 +49,33 @@ const PHOTO_TYPES: { type: PhotoType; label: string; hint: string }[] = [
   { type: PhotoType.SCALE_REFERENCE, label: "Scale", hint: "With ruler/reference" },
 ];
 
+const QUICK_TAGS: { tag: QuickTag; label: string; color: string }[] = [
+  { tag: QuickTag.DEFECT, label: "Defect", color: "#ef4444" },
+  { tag: QuickTag.GOOD, label: "Good", color: "#22c55e" },
+  { tag: QuickTag.INACCESSIBLE, label: "N/A", color: "#6b7280" },
+];
+
+const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
+  [ElementType.ROOF_CLADDING]: "Roof Cladding",
+  [ElementType.RIDGE]: "Ridge",
+  [ElementType.VALLEY]: "Valley",
+  [ElementType.HIP]: "Hip",
+  [ElementType.BARGE]: "Barge",
+  [ElementType.FASCIA]: "Fascia",
+  [ElementType.GUTTER]: "Gutter",
+  [ElementType.DOWNPIPE]: "Downpipe",
+  [ElementType.FLASHING_WALL]: "Wall Flashing",
+  [ElementType.FLASHING_PENETRATION]: "Penetration Flashing",
+  [ElementType.SKYLIGHT]: "Skylight",
+  [ElementType.VENT]: "Vent",
+  [ElementType.OTHER]: "Other",
+};
+
 export function CameraCapture({
   reportId,
   defectId,
-  roofElementId,
+  roofElementId: initialElementId,
+  roofElements = [],
   onCapture,
   onClose,
 }: CameraCaptureProps) {
@@ -50,6 +83,9 @@ export function CameraCapture({
   const [facing, setFacing] = useState<CameraType>("back");
   const [flash, setFlash] = useState<FlashMode>("auto");
   const [selectedType, setSelectedType] = useState<PhotoType>(PhotoType.OVERVIEW);
+  const [selectedQuickTag, setSelectedQuickTag] = useState<QuickTag | null>(null);
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(initialElementId || null);
+  const [showElementPicker, setShowElementPicker] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [gpsStatus, setGpsStatus] = useState<{ accuracy: number; status: "none" | "good" | "fair" | "poor" }>({ accuracy: 999, status: "none" });
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -93,11 +129,12 @@ export function CameraCapture({
         selectedType,
         reportId,
         defectId,
-        roofElementId
+        selectedElementId || undefined,
+        selectedQuickTag || undefined
       );
 
       if (result.success && result.metadata) {
-        onCapture(result.metadata.id);
+        onCapture(result.metadata.id, selectedQuickTag || undefined, selectedElementId || undefined);
         setCaptureStatus("Photo captured!");
 
         // Auto-advance to next photo type
@@ -115,6 +152,13 @@ export function CameraCapture({
       setIsCapturing(false);
       setTimeout(() => setCaptureStatus(""), 2000);
     }
+  };
+
+  const getSelectedElementLabel = (): string => {
+    if (!selectedElementId) return "Select Element";
+    const element = roofElements.find((e) => e.id === selectedElementId);
+    if (!element) return "Select Element";
+    return `${ELEMENT_TYPE_LABELS[element.elementType]} - ${element.location}`;
   };
 
   const toggleFlash = () => {
@@ -200,6 +244,48 @@ export function CameraCapture({
 
         {/* Bottom Controls */}
         <View style={styles.bottomControls}>
+          {/* Element Selector (if elements available) */}
+          {roofElements.length > 0 && (
+            <TouchableOpacity
+              style={styles.elementSelector}
+              onPress={() => setShowElementPicker(true)}
+            >
+              <Text style={styles.elementSelectorLabel}>Element:</Text>
+              <Text style={styles.elementSelectorValue} numberOfLines={1}>
+                {getSelectedElementLabel()}
+              </Text>
+              <Text style={styles.elementSelectorArrow}>▼</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Quick Tags */}
+          <View style={styles.quickTagContainer}>
+            <Text style={styles.quickTagLabel}>Tag:</Text>
+            <View style={styles.quickTagButtons}>
+              {QUICK_TAGS.map((qt) => (
+                <TouchableOpacity
+                  key={qt.tag}
+                  style={[
+                    styles.quickTagButton,
+                    selectedQuickTag === qt.tag && { backgroundColor: qt.color },
+                  ]}
+                  onPress={() =>
+                    setSelectedQuickTag(selectedQuickTag === qt.tag ? null : qt.tag)
+                  }
+                >
+                  <Text
+                    style={[
+                      styles.quickTagButtonText,
+                      selectedQuickTag === qt.tag && styles.quickTagButtonTextActive,
+                    ]}
+                  >
+                    {qt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
           {/* Photo Type Selector */}
           <View style={styles.typeSelector}>
             {PHOTO_TYPES.map((pt) => (
@@ -243,6 +329,52 @@ export function CameraCapture({
             <View style={styles.spacer} />
           </View>
         </View>
+
+        {/* Element Picker Modal */}
+        <Modal
+          visible={showElementPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowElementPicker(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Select Roof Element</Text>
+                <TouchableOpacity onPress={() => setShowElementPicker(false)}>
+                  <Text style={styles.modalClose}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={[{ id: null, elementType: null, location: "None" }, ...roofElements]}
+                keyExtractor={(item) => item.id || "none"}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.elementOption,
+                      selectedElementId === item.id && styles.elementOptionSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedElementId(item.id);
+                      setShowElementPicker(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.elementOptionText,
+                        selectedElementId === item.id && styles.elementOptionTextSelected,
+                      ]}
+                    >
+                      {item.elementType
+                        ? `${ELEMENT_TYPE_LABELS[item.elementType]} - ${item.location}`
+                        : "None (General Photo)"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </View>
+        </Modal>
       </CameraView>
     </SafeAreaView>
   );
@@ -440,6 +572,112 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: "#fff",
+  },
+  // Element Selector
+  elementSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.15)",
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  elementSelectorLabel: {
+    color: "#ccc",
+    fontSize: 12,
+    marginRight: 8,
+  },
+  elementSelectorValue: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  elementSelectorArrow: {
+    color: "#ccc",
+    fontSize: 10,
+    marginLeft: 4,
+  },
+  // Quick Tags
+  quickTagContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  quickTagLabel: {
+    color: "#ccc",
+    fontSize: 12,
+    marginRight: 8,
+  },
+  quickTagButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  quickTagButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  quickTagButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  quickTagButtonTextActive: {
+    fontWeight: "700",
+  },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#1c1c1e",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: "60%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  modalTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalClose: {
+    color: "#fff",
+    fontSize: 20,
+    padding: 4,
+  },
+  elementOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  elementOptionSelected: {
+    backgroundColor: "#2d5c8f",
+  },
+  elementOptionText: {
+    color: "#fff",
+    fontSize: 14,
+  },
+  elementOptionTextSelected: {
+    fontWeight: "600",
   },
 });
 
