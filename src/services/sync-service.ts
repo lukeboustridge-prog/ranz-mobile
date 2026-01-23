@@ -5,8 +5,9 @@
  * - Up-sync: Mobile → Server (reports, photos, defects, elements, compliance)
  */
 
-import NetInfo from "@react-native-community/netinfo";
-import * as FileSystem from "expo-file-system";
+import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
+import * as FileSystem from "expo-file-system/legacy";
+import { FileSystemUploadType } from "expo-file-system/legacy";
 import {
   fetchBootstrapData,
   withRetry,
@@ -106,7 +107,7 @@ class SyncEngine {
   private statusCallback: StatusCallback | null = null;
   private isSyncing: boolean = false;
   private isOnline: boolean = false;
-  private autoSyncTimer: NodeJS.Timeout | null = null;
+  private autoSyncTimer: ReturnType<typeof setInterval> | null = null;
   private networkUnsubscribe: (() => void) | null = null;
 
   constructor() {
@@ -121,7 +122,7 @@ class SyncEngine {
    * Initialize network state listener
    */
   private initializeNetworkListener(): void {
-    this.networkUnsubscribe = NetInfo.addEventListener((state) => {
+    this.networkUnsubscribe = NetInfo.addEventListener((state: NetInfoState) => {
       const wasOnline = this.isOnline;
       this.isOnline = state.isConnected === true && state.isInternetReachable !== false;
 
@@ -684,7 +685,7 @@ class SyncEngine {
         headers: {
           "Content-Type": photo.mimeType,
         },
-        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        uploadType: FileSystemUploadType.BINARY_CONTENT,
       });
 
       if (uploadResult.status >= 200 && uploadResult.status < 300) {

@@ -6,9 +6,15 @@
 import { useEffect, useState } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/clerk-expo";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { initializeDatabase } from "../src/lib/sqlite";
+import { startAutoSync, stopAutoSync } from "../src/services/sync-service";
+
+// Import background sync to register the task definition
+// This must be imported at the top level so TaskManager.defineTask runs
+import "../src/services/background-sync";
+import { registerBackgroundSync, unregisterBackgroundSync } from "../src/services/background-sync";
 
 // Clerk publishable key - should be in environment variables
 const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
@@ -60,6 +66,7 @@ function AuthGuard() {
 
 /**
  * Database Initialization Component
+ * Also handles sync initialization and background task registration
  */
 function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [isDbReady, setIsDbReady] = useState(false);
@@ -70,12 +77,44 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
       try {
         await initializeDatabase();
         setIsDbReady(true);
+
+        // Register background sync task after DB is ready
+        await registerBackgroundSync();
+
+        // Start foreground auto-sync when app is active
+        startAutoSync();
       } catch (error) {
         console.error("Failed to initialize database:", error);
         setDbError(error instanceof Error ? error : new Error("Database init failed"));
       }
     }
     initDb();
+
+    // Cleanup on unmount
+    return () => {
+      stopAutoSync();
+    };
+  }, []);
+
+  // Handle app state changes for foreground/background sync management
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === "active") {
+        // App came to foreground - start auto-sync
+        console.log("[App] Foreground - starting auto-sync");
+        startAutoSync();
+      } else if (nextAppState === "background") {
+        // App went to background - stop foreground sync (background task handles it)
+        console.log("[App] Background - stopping foreground auto-sync");
+        stopAutoSync();
+      }
+    };
+
+    const subscription = AppState.addEventListener("change", handleAppStateChange);
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   if (dbError) {
