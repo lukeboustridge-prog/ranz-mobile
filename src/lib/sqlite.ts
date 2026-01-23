@@ -19,6 +19,7 @@ import {
   type LocalDefect,
   type LocalRoofElement,
   type LocalVoiceNote,
+  type LocalVideo,
   type LocalComplianceAssessment,
   type LocalChecklist,
   type LocalTemplate,
@@ -779,6 +780,109 @@ function mapVoiceNoteRow(row: Record<string, unknown>): LocalVoiceNote {
     recordedAt: row.recorded_at as string,
     transcription: row.transcription as string | null,
     syncStatus: row.sync_status as LocalVoiceNote["syncStatus"],
+    uploadedUrl: row.uploaded_url as string | null,
+    syncedAt: row.synced_at as string | null,
+    lastSyncError: row.last_sync_error as string | null,
+    createdAt: row.created_at as string,
+  };
+}
+
+// ============================================
+// VIDEO OPERATIONS
+// ============================================
+
+export async function saveVideo(video: LocalVideo): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `INSERT OR REPLACE INTO videos (
+      id, report_id, defect_id, roof_element_id,
+      local_uri, thumbnail_uri, filename, original_filename, mime_type, file_size, duration_ms,
+      title, description, recorded_at, gps_lat, gps_lng,
+      sync_status, uploaded_url, synced_at, last_sync_error, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      video.id,
+      video.reportId,
+      video.defectId,
+      video.roofElementId,
+      video.localUri,
+      video.thumbnailUri,
+      video.filename,
+      video.originalFilename,
+      video.mimeType,
+      video.fileSize,
+      video.durationMs,
+      video.title,
+      video.description,
+      video.recordedAt,
+      video.gpsLat,
+      video.gpsLng,
+      video.syncStatus,
+      video.uploadedUrl,
+      video.syncedAt,
+      video.lastSyncError,
+      video.createdAt,
+    ]
+  );
+}
+
+export async function getVideosForReport(reportId: string): Promise<LocalVideo[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    "SELECT * FROM videos WHERE report_id = ? ORDER BY recorded_at ASC",
+    [reportId]
+  );
+
+  return results.map(mapVideoRow);
+}
+
+export async function getVideoById(id: string): Promise<LocalVideo | null> {
+  const database = getDatabase();
+  const result = await database.getFirstAsync<Record<string, unknown>>(
+    "SELECT * FROM videos WHERE id = ?",
+    [id]
+  );
+
+  if (!result) return null;
+  return mapVideoRow(result);
+}
+
+export async function deleteVideo(id: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync("DELETE FROM videos WHERE id = ?", [id]);
+}
+
+export async function updateVideoMetadata(
+  id: string,
+  title: string | null,
+  description: string | null
+): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    "UPDATE videos SET title = ?, description = ?, sync_status = 'pending' WHERE id = ?",
+    [title, description, id]
+  );
+}
+
+function mapVideoRow(row: Record<string, unknown>): LocalVideo {
+  return {
+    id: row.id as string,
+    reportId: row.report_id as string,
+    defectId: row.defect_id as string | null,
+    roofElementId: row.roof_element_id as string | null,
+    localUri: row.local_uri as string,
+    thumbnailUri: row.thumbnail_uri as string | null,
+    filename: row.filename as string,
+    originalFilename: row.original_filename as string,
+    mimeType: row.mime_type as string,
+    fileSize: row.file_size as number,
+    durationMs: row.duration_ms as number,
+    title: row.title as string | null,
+    description: row.description as string | null,
+    recordedAt: row.recorded_at as string,
+    gpsLat: row.gps_lat as number | null,
+    gpsLng: row.gps_lng as number | null,
+    syncStatus: row.sync_status as LocalVideo["syncStatus"],
     uploadedUrl: row.uploaded_url as string | null,
     syncedAt: row.synced_at as string | null,
     lastSyncError: row.last_sync_error as string | null,

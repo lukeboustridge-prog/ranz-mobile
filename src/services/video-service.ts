@@ -1,0 +1,384 @@
+/**
+ * Video Service
+ * Video recording and management for walkthrough documentation
+ */
+
+import { CameraView } from "expo-camera";
+import {
+  documentDirectory,
+  makeDirectoryAsync,
+  getInfoAsync,
+  deleteAsync,
+} from "expo-file-system/legacy";
+import {
+  saveVideo,
+  getVideosForReport,
+  getVideoById,
+  deleteVideo as deleteVideoFromDb,
+  addToSyncQueue,
+} from "../lib/sqlite";
+import {
+  getCurrentLocation,
+  type LocationData,
+} from "./photo-service";
+import type { LocalVideo } from "../types/database";
+
+// ============================================
+// TYPES
+// ============================================
+
+export interface VideoMetadata {
+  id: string;
+  reportId: string;
+  defectId: string | null;
+  roofElementId: string | null;
+  localUri: string;
+  thumbnailUri: string | null;
+  filename: string;
+  durationMs: number;
+  title: string | null;
+  description: string | null;
+  recordedAt: string;
+  gpsLat: number | null;
+  gpsLng: number | null;
+  fileSize: number;
+}
+
+export interface RecordingResult {
+  success: boolean;
+  metadata?: VideoMetadata;
+  error?: string;
+}
+
+type RecordingProgressCallback = (durationMs: number) => void;
+
+// ============================================
+// VIDEO SERVICE CLASS
+// ============================================
+
+class VideoService {
+  private isRecording: boolean = false;
+  private recordingStartTime: number = 0;
+  private progressCallback: RecordingProgressCallback | null = null;
+  private progressInterval: ReturnType<typeof setInterval> | null = null;
+  private currentRecordingPromise: Promise<{ uri: string } | undefined> | null = null;
+
+  /**
+   * Register progress callback for recording duration updates
+   */
+  onRecordingProgress(callback: RecordingProgressCallback): void {
+    this.progressCallback = callback;
+  }
+
+  /**
+   * Start video recording
+   */
+  async startRecording(
+    cameraRef: CameraView,
+    reportId: string,
+    defectId?: string,
+    roofElementId?: string
+  ): Promise<boolean> {
+    if (this.isRecording) {
+      console.warn("[VideoService] Already recording");
+      return false;
+    }
+
+    try {
+      // Ensure videos directory exists
+      const videosDir = `${documentDirectory}videos`;
+      const dirInfo = await getInfoAsync(videosDir);
+      if (!dirInfo.exists) {
+        await makeDirectoryAsync(videosDir, { intermediates: true });
+      }
+
+      this.isRecording = true;
+      this.recordingStartTime = Date.now();
+
+      // Start progress updates
+      if (this.progressCallback) {
+        this.progressInterval = setInterval(() => {
+          const durationMs = Date.now() - this.recordingStartTime;
+          this.progressCallback?.(durationMs);
+        }, 100);
+      }
+
+      // Start recording - this returns a promise that resolves when recording stops
+      this.currentRecordingPromise = cameraRef.recordAsync({
+        maxDuration: 300, // 5 minutes max
+      });
+
+      console.log("[VideoService] Recording started");
+      return true;
+    } catch (error) {
+      console.error("[VideoService] Failed to start recording:", error);
+      this.isRecording = false;
+      return false;
+    }
+  }
+
+  /**
+   * Stop video recording and save
+   */
+  async stopRecording(
+    cameraRef: CameraView,
+    reportId: string,
+    defectId?: string,
+    roofElementId?: string
+  ): Promise<RecordingResult> {
+    if (!this.isRecording || !this.currentRecordingPromise) {
+      return { success: false, error: "No active recording" };
+    }
+
+    try {
+      // Stop progress updates
+      if (this.progressInterval) {
+        clearInterval(this.progressInterval);
+        this.progressInterval = null;
+      }
+
+      const durationMs = Date.now() - this.recordingStartTime;
+
+      // Stop the recording
+      cameraRef.stopRecording();
+
+      // Wait for the recording to finish and get the URI
+      const result = await this.currentRecordingPromise;
+
+      if (!result || !result.uri) {
+        throw new Error("Recording URI not available");
+      }
+
+      const uri = result.uri;
+
+      // Generate unique ID and filename
+      const id = `video_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const filename = `${id}.mp4`;
+      const timestamp = new Date().toISOString();
+
+      // Get GPS data
+      const gpsData = getCurrentLocation();
+
+      // Get file info
+      const fileInfo = await getInfoAsync(uri);
+      const fileSize = (fileInfo as { size?: number }).size || 0;
+
+      // Build metadata
+      const metadata: VideoMetadata = {
+        id,
+        reportId,
+        defectId: defectId || null,
+        roofElementId: roofElementId || null,
+        localUri: uri,
+        thumbnailUri: null, // TODO: Generate thumbnail
+        filename,
+        durationMs,
+        title: null,
+        description: null,
+        recordedAt: timestamp,
+        gpsLat: gpsData?.latitude ?? null,
+        gpsLng: gpsData?.longitude ?? null,
+        fileSize,
+      };
+
+      // Save to database
+      const localVideo: LocalVideo = {
+        id,
+        reportId,
+        defectId: defectId || null,
+        roofElementId: roofElementId || null,
+        localUri: uri,
+        thumbnailUri: null,
+        filename,
+        originalFilename: filename,
+        mimeType: "video/mp4",
+        fileSize,
+        durationMs,
+        title: null,
+        description: null,
+        recordedAt: timestamp,
+        gpsLat: gpsData?.latitude ?? null,
+        gpsLng: gpsData?.longitude ?? null,
+        syncStatus: "draft",
+        uploadedUrl: null,
+        syncedAt: null,
+        lastSyncError: null,
+        createdAt: timestamp,
+      };
+
+      await saveVideo(localVideo);
+
+      // Add to sync queue
+      await addToSyncQueue("video", id, "create", {
+        reportId,
+        defectId,
+        roofElementId,
+        metadata,
+      });
+
+      console.log("[VideoService] Recording saved:", {
+        id,
+        durationMs,
+        fileSize,
+      });
+
+      // Reset state
+      this.isRecording = false;
+      this.currentRecordingPromise = null;
+
+      return { success: true, metadata };
+    } catch (error) {
+      console.error("[VideoService] Failed to stop recording:", error);
+      this.isRecording = false;
+      this.currentRecordingPromise = null;
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to save recording",
+      };
+    }
+  }
+
+  /**
+   * Cancel and discard current recording
+   */
+  async cancelRecording(cameraRef: CameraView): Promise<void> {
+    if (!this.isRecording) return;
+
+    try {
+      if (this.progressInterval) {
+        clearInterval(this.progressInterval);
+        this.progressInterval = null;
+      }
+
+      cameraRef.stopRecording();
+
+      // Wait for recording to finish
+      if (this.currentRecordingPromise) {
+        const result = await this.currentRecordingPromise;
+        if (result?.uri) {
+          await deleteAsync(result.uri, { idempotent: true });
+        }
+      }
+    } catch (error) {
+      console.error("[VideoService] Failed to cancel recording:", error);
+    } finally {
+      this.isRecording = false;
+      this.currentRecordingPromise = null;
+    }
+  }
+
+  /**
+   * Check if currently recording
+   */
+  getIsRecording(): boolean {
+    return this.isRecording;
+  }
+
+  /**
+   * Get current recording duration
+   */
+  getCurrentDuration(): number {
+    if (!this.isRecording) return 0;
+    return Date.now() - this.recordingStartTime;
+  }
+
+  /**
+   * Get videos for a report
+   */
+  async getVideosForReport(reportId: string): Promise<VideoMetadata[]> {
+    const videos = await getVideosForReport(reportId);
+    return videos.map((v) => ({
+      id: v.id,
+      reportId: v.reportId,
+      defectId: v.defectId,
+      roofElementId: v.roofElementId,
+      localUri: v.localUri,
+      thumbnailUri: v.thumbnailUri,
+      filename: v.filename,
+      durationMs: v.durationMs,
+      title: v.title,
+      description: v.description,
+      recordedAt: v.recordedAt,
+      gpsLat: v.gpsLat,
+      gpsLng: v.gpsLng,
+      fileSize: v.fileSize,
+    }));
+  }
+
+  /**
+   * Get a video by ID
+   */
+  async getVideoById(id: string): Promise<VideoMetadata | null> {
+    const video = await getVideoById(id);
+    if (!video) return null;
+
+    return {
+      id: video.id,
+      reportId: video.reportId,
+      defectId: video.defectId,
+      roofElementId: video.roofElementId,
+      localUri: video.localUri,
+      thumbnailUri: video.thumbnailUri,
+      filename: video.filename,
+      durationMs: video.durationMs,
+      title: video.title,
+      description: video.description,
+      recordedAt: video.recordedAt,
+      gpsLat: video.gpsLat,
+      gpsLng: video.gpsLng,
+      fileSize: video.fileSize,
+    };
+  }
+
+  /**
+   * Delete a video
+   */
+  async deleteVideo(id: string, localUri: string): Promise<void> {
+    try {
+      // Delete from file system
+      await deleteAsync(localUri, { idempotent: true });
+
+      // Delete from database
+      await deleteVideoFromDb(id);
+
+      // Add delete to sync queue
+      await addToSyncQueue("video", id, "delete", { id });
+
+      console.log("[VideoService] Video deleted:", id);
+    } catch (error) {
+      console.error("[VideoService] Failed to delete video:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Format duration for display (mm:ss)
+   */
+  formatDuration(durationMs: number): string {
+    const totalSeconds = Math.floor(durationMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  }
+
+  /**
+   * Format file size for display
+   */
+  formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+}
+
+// Export singleton instance
+export const videoService = new VideoService();
+
+// Export convenience functions
+export function formatVideoDuration(durationMs: number): string {
+  return videoService.formatDuration(durationMs);
+}
+
+export function formatVideoFileSize(bytes: number): string {
+  return videoService.formatFileSize(bytes);
+}

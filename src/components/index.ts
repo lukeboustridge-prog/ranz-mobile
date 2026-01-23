@@ -24,3 +24,6 @@ export { VoiceNoteRecorder } from "./VoiceNoteRecorder";
 // Photo Annotation
 export { PhotoAnnotator } from "./PhotoAnnotator";
 export type { Annotation, AnnotationTool, Point } from "./PhotoAnnotator";
+
+// Video Capture
+export { VideoCapture } from "./VideoCapture";

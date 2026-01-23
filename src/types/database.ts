@@ -267,12 +267,45 @@ export interface LocalVoiceNote {
   createdAt: string;
 }
 
+export interface LocalVideo {
+  id: string;
+  reportId: string;
+  defectId: string | null;
+  roofElementId: string | null;
+
+  // File info
+  localUri: string;
+  thumbnailUri: string | null;
+  filename: string;
+  originalFilename: string;
+  mimeType: string;
+  fileSize: number;
+  durationMs: number;
+
+  // Metadata
+  title: string | null;
+  description: string | null;
+  recordedAt: string;
+
+  // GPS (captured at start of recording)
+  gpsLat: number | null;
+  gpsLng: number | null;
+
+  // Sync tracking
+  syncStatus: SyncStatus;
+  uploadedUrl: string | null;
+  syncedAt: string | null;
+  lastSyncError: string | null;
+
+  createdAt: string;
+}
+
 // ============================================
 // DATABASE SCHEMA CREATION
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 5; // Incremented for schema changes (v5: added annotations to photos)
+export const DATABASE_VERSION = 6; // Incremented for schema changes (v6: added videos table)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -489,6 +522,44 @@ CREATE TABLE IF NOT EXISTS voice_notes (
   FOREIGN KEY (roof_element_id) REFERENCES roof_elements(id) ON DELETE SET NULL
 );
 
+-- Videos (walkthrough recordings)
+CREATE TABLE IF NOT EXISTS videos (
+  id TEXT PRIMARY KEY,
+  report_id TEXT NOT NULL,
+  defect_id TEXT,
+  roof_element_id TEXT,
+
+  -- File info
+  local_uri TEXT NOT NULL,
+  thumbnail_uri TEXT,
+  filename TEXT NOT NULL,
+  original_filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  duration_ms INTEGER NOT NULL,
+
+  -- Metadata
+  title TEXT,
+  description TEXT,
+  recorded_at TEXT NOT NULL,
+
+  -- GPS
+  gps_lat REAL,
+  gps_lng REAL,
+
+  -- Sync tracking
+  sync_status TEXT NOT NULL DEFAULT 'draft',
+  uploaded_url TEXT,
+  synced_at TEXT,
+  last_sync_error TEXT,
+
+  created_at TEXT NOT NULL,
+
+  FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+  FOREIGN KEY (defect_id) REFERENCES defects(id) ON DELETE SET NULL,
+  FOREIGN KEY (roof_element_id) REFERENCES roof_elements(id) ON DELETE SET NULL
+);
+
 -- Compliance Assessments (mirrors Prisma ComplianceAssessment model)
 CREATE TABLE IF NOT EXISTS compliance_assessments (
   id TEXT PRIMARY KEY,
@@ -565,6 +636,10 @@ CREATE INDEX IF NOT EXISTS idx_voice_notes_report_id ON voice_notes(report_id);
 CREATE INDEX IF NOT EXISTS idx_voice_notes_defect_id ON voice_notes(defect_id);
 CREATE INDEX IF NOT EXISTS idx_voice_notes_sync_status ON voice_notes(sync_status);
 
+CREATE INDEX IF NOT EXISTS idx_videos_report_id ON videos(report_id);
+CREATE INDEX IF NOT EXISTS idx_videos_defect_id ON videos(defect_id);
+CREATE INDEX IF NOT EXISTS idx_videos_sync_status ON videos(sync_status);
+
 CREATE INDEX IF NOT EXISTS idx_compliance_report_id ON compliance_assessments(report_id);
 
 CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id);
@@ -635,6 +710,41 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       -- Migration from v4 to v5: Add annotations columns to photos
       ALTER TABLE photos ADD COLUMN annotations_json TEXT;
       ALTER TABLE photos ADD COLUMN annotated_uri TEXT;
+    `,
+  },
+  {
+    version: 6,
+    sql: `
+      -- Migration from v5 to v6: Add videos table
+      CREATE TABLE IF NOT EXISTS videos (
+        id TEXT PRIMARY KEY,
+        report_id TEXT NOT NULL,
+        defect_id TEXT,
+        roof_element_id TEXT,
+        local_uri TEXT NOT NULL,
+        thumbnail_uri TEXT,
+        filename TEXT NOT NULL,
+        original_filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_size INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        title TEXT,
+        description TEXT,
+        recorded_at TEXT NOT NULL,
+        gps_lat REAL,
+        gps_lng REAL,
+        sync_status TEXT NOT NULL DEFAULT 'draft',
+        uploaded_url TEXT,
+        synced_at TEXT,
+        last_sync_error TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+        FOREIGN KEY (defect_id) REFERENCES defects(id) ON DELETE SET NULL,
+        FOREIGN KEY (roof_element_id) REFERENCES roof_elements(id) ON DELETE SET NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_videos_report_id ON videos(report_id);
+      CREATE INDEX IF NOT EXISTS idx_videos_defect_id ON videos(defect_id);
+      CREATE INDEX IF NOT EXISTS idx_videos_sync_status ON videos(sync_status);
     `,
   },
 ];
