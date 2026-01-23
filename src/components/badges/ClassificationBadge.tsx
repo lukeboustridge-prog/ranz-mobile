@@ -11,6 +11,7 @@ const CLASSIFICATION_COLORS: Record<DefectClass, string> = {
   [DefectClass.MINOR_DEFECT]: "#f59e0b",
   [DefectClass.SAFETY_HAZARD]: "#7c3aed",
   [DefectClass.MAINTENANCE_ITEM]: "#0891b2",
+  [DefectClass.WORKMANSHIP_ISSUE]: "#ea580c",
 };
 
 const CLASSIFICATION_LABELS: Record<DefectClass, string> = {
@@ -18,6 +19,7 @@ const CLASSIFICATION_LABELS: Record<DefectClass, string> = {
   [DefectClass.MINOR_DEFECT]: "Minor Defect",
   [DefectClass.SAFETY_HAZARD]: "Safety Hazard",
   [DefectClass.MAINTENANCE_ITEM]: "Maintenance",
+  [DefectClass.WORKMANSHIP_ISSUE]: "Workmanship",
 };
 
 interface ClassificationBadgeProps {
