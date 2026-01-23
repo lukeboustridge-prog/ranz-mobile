@@ -7,6 +7,8 @@
 export { SeverityBadge } from "./badges/SeverityBadge";
 export { ClassificationBadge } from "./badges/ClassificationBadge";
 export { ConditionBadge } from "./badges/ConditionBadge";
+export { StatusBadge } from "./badges/StatusBadge";
+export { RoleBadge } from "./badges/RoleBadge";
 
 // Form Components
 export { ChipSelector } from "./ChipSelector";
@@ -43,3 +45,7 @@ export type {
   Calibration,
   Point as MeasurementPoint,
 } from "./MeasurementTool";
+
+// Review Components
+export { ReviewActionDialog } from "./ReviewActionDialog";
+export type { ReviewActionType } from "./ReviewActionDialog";

@@ -358,6 +358,9 @@ export interface ReportSummary {
   propertyCity: string;
   inspectionType: InspectionType;
   status: ReportStatus;
+  inspectorId?: string;
+  submittedAt?: string;
+  approvedAt?: string;
   createdAt: string;
   updatedAt: string;
   photoCount: number;

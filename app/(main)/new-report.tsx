@@ -120,6 +120,9 @@ export default function NewReportScreen() {
         recommendationsJson: null,
         declarationSigned: false,
         signedAt: null,
+        inspectorId: null, // Will be set from auth context
+        submittedAt: null,
+        approvedAt: null,
         syncStatus: "draft",
         createdAt: now,
         updatedAt: now,

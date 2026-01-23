@@ -20,6 +20,7 @@ import type {
   PhotoSyncStatus,
   ComplianceStatus,
   UserRole,
+  UserStatus,
 } from "./shared";
 
 // ============================================
@@ -33,6 +34,7 @@ export interface LocalUser {
   name: string;
   phone: string | null;
   role: UserRole;
+  status: UserStatus;
   company: string | null;
   qualifications: string | null;
   lbpNumber: string | null;
@@ -77,6 +79,13 @@ export interface LocalReport {
   // Sign-off
   declarationSigned: boolean;
   signedAt: string | null;
+
+  // Inspector
+  inspectorId: string | null;
+
+  // Submission/Approval
+  submittedAt: string | null;
+  approvedAt: string | null;
 
   // Sync tracking
   syncStatus: SyncStatus;
@@ -305,12 +314,23 @@ export interface LocalVideo {
   createdAt: string;
 }
 
+export interface LocalAuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  userId: string;
+  userName: string;
+  details: string | null;
+  createdAt: string;
+}
+
 // ============================================
 // DATABASE SCHEMA CREATION
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 7; // Incremented for schema changes (v7: added measurements columns)
+export const DATABASE_VERSION = 8; // Incremented for schema changes (v8: added audit_log table)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -657,6 +677,22 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_created ON sync_queue(created_at);
 
 CREATE INDEX IF NOT EXISTS idx_checklists_standard ON checklists(standard);
 CREATE INDEX IF NOT EXISTS idx_checklists_category ON checklists(category);
+
+-- Audit Log (tracks system activity)
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  action TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  details TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
 `;
 
 // ============================================
@@ -764,6 +800,25 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE photos ADD COLUMN measurements_json TEXT;
       ALTER TABLE photos ADD COLUMN calibration_json TEXT;
       ALTER TABLE photos ADD COLUMN measured_uri TEXT;
+    `,
+  },
+  {
+    version: 8,
+    sql: `
+      -- Migration from v7 to v8: Add audit_log table
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        user_name TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
     `,
   },
 ];

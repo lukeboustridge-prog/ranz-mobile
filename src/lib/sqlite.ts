@@ -25,6 +25,7 @@ import {
   type LocalTemplate,
   type LocalSyncQueue,
   type LocalSyncState,
+  type LocalAuditLog,
 } from "../types/database";
 
 let db: SQLite.SQLiteDatabase | null = null;
@@ -219,6 +220,7 @@ function mapUserRow(row: Record<string, unknown>): LocalUser {
     name: row.name as string,
     phone: row.phone as string | null,
     role: row.role as LocalUser["role"],
+    status: (row.status as LocalUser["status"]) || "ACTIVE",
     company: row.company as string | null,
     qualifications: row.qualifications as string | null,
     lbpNumber: row.lbp_number as string | null,
@@ -230,6 +232,14 @@ function mapUserRow(row: Record<string, unknown>): LocalUser {
 export async function clearUser(): Promise<void> {
   const database = getDatabase();
   await database.runAsync("DELETE FROM users");
+}
+
+export async function getAllUsers(): Promise<LocalUser[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    "SELECT * FROM users ORDER BY name ASC"
+  );
+  return results.map(mapUserRow);
 }
 
 // ============================================
@@ -347,6 +357,9 @@ function mapReportRow(row: Record<string, unknown>): LocalReport {
     recommendationsJson: row.recommendations_json as string | null,
     declarationSigned: (row.declaration_signed as number) === 1,
     signedAt: row.signed_at as string | null,
+    inspectorId: row.inspector_id as string | null,
+    submittedAt: row.submitted_at as string | null,
+    approvedAt: row.approved_at as string | null,
     syncStatus: row.sync_status as LocalReport["syncStatus"],
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string,
@@ -1219,4 +1232,209 @@ export async function getReportWithRelations(reportId: string): Promise<{
   ]);
 
   return { report, elements, defects, photos, compliance };
+}
+
+// ============================================
+// REVIEW WORKFLOW OPERATIONS
+// ============================================
+
+/**
+ * Update a report's status
+ */
+export async function updateReportStatus(
+  reportId: string,
+  status: string,
+  timestamp: string | null
+): Promise<void> {
+  const database = getDatabase();
+  const now = new Date().toISOString();
+
+  // Determine which timestamp field to update based on status
+  let timestampField = "";
+  if (status === "PENDING_REVIEW") {
+    timestampField = ", submitted_at = ?";
+  } else if (status === "APPROVED") {
+    timestampField = ", approved_at = ?";
+  }
+
+  if (timestampField && timestamp) {
+    await database.runAsync(
+      `UPDATE reports SET status = ?, sync_status = 'pending', updated_at = ?${timestampField} WHERE id = ?`,
+      [status, now, timestamp, reportId]
+    );
+  } else {
+    await database.runAsync(
+      `UPDATE reports SET status = ?, sync_status = 'pending', updated_at = ? WHERE id = ?`,
+      [status, now, reportId]
+    );
+  }
+}
+
+/**
+ * Get reports pending review
+ */
+export async function getReportsPendingReview(): Promise<LocalReport[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM reports WHERE status = 'PENDING_REVIEW' ORDER BY submitted_at ASC`
+  );
+  return results.map(mapReportRow);
+}
+
+/**
+ * Get reports by status
+ */
+export async function getReportsByStatus(status: string): Promise<LocalReport[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM reports WHERE status = ? ORDER BY updated_at DESC`,
+    [status]
+  );
+  return results.map(mapReportRow);
+}
+
+/**
+ * Get approved reports
+ */
+export async function getApprovedReports(): Promise<LocalReport[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM reports WHERE status = 'APPROVED' ORDER BY approved_at DESC`
+  );
+  return results.map(mapReportRow);
+}
+
+/**
+ * Get finalised reports
+ */
+export async function getFinalisedReports(): Promise<LocalReport[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM reports WHERE status = 'FINALISED' ORDER BY updated_at DESC`
+  );
+  return results.map(mapReportRow);
+}
+
+/**
+ * Search reports by query
+ */
+export async function searchReports(query: string): Promise<LocalReport[]> {
+  const database = getDatabase();
+  const searchPattern = `%${query}%`;
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM reports
+     WHERE property_address LIKE ?
+        OR client_name LIKE ?
+        OR report_number LIKE ?
+     ORDER BY updated_at DESC
+     LIMIT 50`,
+    [searchPattern, searchPattern, searchPattern]
+  );
+  return results.map(mapReportRow);
+}
+
+/**
+ * Get report counts by status
+ */
+export async function getReportCountsByStatus(): Promise<Record<string, number>> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<{ status: string; count: number }>(
+    `SELECT status, COUNT(*) as count FROM reports GROUP BY status`
+  );
+
+  const counts: Record<string, number> = {
+    DRAFT: 0,
+    IN_PROGRESS: 0,
+    PENDING_REVIEW: 0,
+    APPROVED: 0,
+    FINALISED: 0,
+  };
+
+  for (const row of results) {
+    counts[row.status] = row.count;
+  }
+
+  return counts;
+}
+
+// ============================================
+// AUDIT LOG OPERATIONS
+// ============================================
+
+/**
+ * Add an entry to the audit log
+ */
+export async function addAuditLog(
+  action: string,
+  entityType: string,
+  entityId: string,
+  userId: string,
+  userName: string,
+  details?: string
+): Promise<void> {
+  const database = getDatabase();
+  const id = `audit_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  const timestamp = new Date().toISOString();
+
+  await database.runAsync(
+    `INSERT INTO audit_log (id, action, entity_type, entity_id, user_id, user_name, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, action, entityType, entityId, userId, userName, details || null, timestamp]
+  );
+}
+
+/**
+ * Get audit log entries
+ */
+export async function getAuditLog(entityTypeFilter?: string | null): Promise<LocalAuditLog[]> {
+  const database = getDatabase();
+
+  let query = "SELECT * FROM audit_log";
+  const params: string[] = [];
+
+  if (entityTypeFilter) {
+    query += " WHERE entity_type = ?";
+    params.push(entityTypeFilter);
+  }
+
+  query += " ORDER BY created_at DESC LIMIT 100";
+
+  const results = await database.getAllAsync<Record<string, unknown>>(query, params);
+
+  return results.map((row) => ({
+    id: row.id as string,
+    action: row.action as string,
+    entityType: row.entity_type as string,
+    entityId: row.entity_id as string,
+    userId: row.user_id as string,
+    userName: row.user_name as string,
+    details: row.details as string | null,
+    createdAt: row.created_at as string,
+  }));
+}
+
+/**
+ * Get audit log entries for a specific entity
+ */
+export async function getAuditLogForEntity(
+  entityType: string,
+  entityId: string
+): Promise<LocalAuditLog[]> {
+  const database = getDatabase();
+
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    "SELECT * FROM audit_log WHERE entity_type = ? AND entity_id = ? ORDER BY created_at DESC",
+    [entityType, entityId]
+  );
+
+  return results.map((row) => ({
+    id: row.id as string,
+    action: row.action as string,
+    entityType: row.entity_type as string,
+    entityId: row.entity_id as string,
+    userId: row.user_id as string,
+    userName: row.user_name as string,
+    details: row.details as string | null,
+    createdAt: row.created_at as string,
+  }));
 }
