@@ -606,6 +606,30 @@ export async function deletePhoto(id: string): Promise<void> {
   await database.runAsync("DELETE FROM photos WHERE id = ?", [id]);
 }
 
+/**
+ * Link a photo to a defect after the defect is saved
+ */
+export async function updatePhotoDefectId(photoId: string, defectId: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    "UPDATE photos SET defect_id = ?, sync_status = 'pending' WHERE id = ?",
+    [defectId, photoId]
+  );
+}
+
+/**
+ * Link multiple photos to a defect
+ */
+export async function linkPhotosToDefect(photoIds: string[], defectId: string): Promise<void> {
+  const database = getDatabase();
+  for (const photoId of photoIds) {
+    await database.runAsync(
+      "UPDATE photos SET defect_id = ?, sync_status = 'pending' WHERE id = ?",
+      [defectId, photoId]
+    );
+  }
+}
+
 function mapPhotoRow(row: Record<string, unknown>): LocalPhoto {
   return {
     id: row.id as string,

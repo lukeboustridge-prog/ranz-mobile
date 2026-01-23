@@ -294,7 +294,10 @@ export default function ReportDetailScreen() {
 
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => router.push(`/(main)/compliance-assessment?reportId=${id}`)}
+          onPress={() => router.push({
+            pathname: "/(main)/compliance/[reportId]",
+            params: { reportId: id || "" }
+          } as any)}
         >
           <Text style={styles.actionIcon}>✓</Text>
           <View style={styles.actionContent}>
