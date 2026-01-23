@@ -4,28 +4,37 @@
  */
 
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Platform } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Link, useRouter } from "expo-router";
-import { getAllReportDrafts, getDatabaseStats } from "../../src/lib/sqlite";
-import type { LocalReportDraft } from "../../src/types/database";
+import type { LocalReport } from "../../src/types/database";
+
+// SQLite is not supported on web - only import on native
+const isNative = Platform.OS !== "web";
 
 export default function HomeScreen() {
   const { signOut } = useAuth();
   const { user } = useUser();
   const router = useRouter();
 
-  const [reports, setReports] = useState<LocalReportDraft[]>([]);
-  const [stats, setStats] = useState({ reports: 0, photos: 0, pendingSync: 0, checklists: 0 });
+  const [reports, setReports] = useState<LocalReport[]>([]);
+  const [stats, setStats] = useState({ reports: 0, photos: 0, defects: 0, elements: 0, pendingSync: 0, checklists: 0 });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadData = async () => {
+    if (!isNative) {
+      // Web mode - show demo data or empty state
+      console.log("[Home] Running in web mode - SQLite not available");
+      return;
+    }
+
     try {
-      const [drafts, dbStats] = await Promise.all([
-        getAllReportDrafts(),
-        getDatabaseStats(),
+      const sqlite = await import("../../src/lib/sqlite");
+      const [allReports, dbStats] = await Promise.all([
+        sqlite.getAllReports(),
+        sqlite.getDatabaseStats(),
       ]);
-      setReports(drafts);
+      setReports(allReports);
       setStats(dbStats);
     } catch (error) {
       console.error("Failed to load data:", error);
@@ -73,7 +82,7 @@ export default function HomeScreen() {
     }
   };
 
-  const renderReportItem = ({ item }: { item: LocalReportDraft }) => (
+  const renderReportItem = ({ item }: { item: LocalReport }) => (
     <TouchableOpacity
       style={styles.reportCard}
       onPress={() => router.push(`/(main)/report-detail/${item.id}`)}

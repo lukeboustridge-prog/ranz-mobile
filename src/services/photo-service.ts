@@ -26,7 +26,6 @@ import type { PhotoType } from "../types/shared";
 
 export interface PhotoMetadata {
   id: string;
-  localId: string;
   reportId: string;
   photoType: PhotoType;
   timestamp: string;
@@ -42,7 +41,7 @@ export interface PhotoMetadata {
   focalLength: number | null;
   originalHash: string;
   localUri: string;
-  status: "captured" | "processing" | "uploaded" | "synced";
+  syncStatus: "captured" | "processing" | "uploaded" | "synced" | "error";
 }
 
 export interface CaptureResult {
@@ -287,7 +286,6 @@ class PhotoService {
       // Build metadata object
       const metadata: PhotoMetadata = {
         id,
-        localId,
         reportId,
         photoType,
         timestamp,
@@ -303,7 +301,7 @@ class PhotoService {
         focalLength: photo.exif?.FocalLength ?? null,
         originalHash,
         localUri,
-        status: "captured",
+        syncStatus: "captured",
       };
 
       this.emitProgress("Saving to database...");
@@ -311,12 +309,12 @@ class PhotoService {
       // Save to local database
       const localPhoto: LocalPhoto = {
         id,
-        localId,
         reportId,
         defectId: defectId ?? null,
         roofElementId: roofElementId ?? null,
         localUri,
         thumbnailUri: null, // TODO: Generate thumbnail
+        filename,
         originalFilename: filename,
         mimeType: "image/jpeg",
         fileSize,
@@ -335,7 +333,7 @@ class PhotoService {
         originalHash,
         caption: null,
         sortOrder: 0,
-        status: "captured",
+        syncStatus: "captured",
         uploadedUrl: null,
         syncedAt: null,
         lastSyncError: null,
@@ -387,7 +385,6 @@ class PhotoService {
 
     return photos.map((p) => ({
       id: p.id,
-      localId: p.localId,
       reportId: p.reportId,
       photoType: p.photoType as PhotoType,
       timestamp: p.capturedAt || p.createdAt,
@@ -403,7 +400,7 @@ class PhotoService {
       focalLength: p.focalLength,
       originalHash: p.originalHash,
       localUri: p.localUri,
-      status: p.status as PhotoMetadata["status"],
+      syncStatus: p.syncStatus as PhotoMetadata["syncStatus"],
     }));
   }
 

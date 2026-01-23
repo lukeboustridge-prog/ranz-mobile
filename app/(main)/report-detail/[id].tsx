@@ -14,14 +14,14 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useLocalDB } from "../../../src/hooks/useLocalDB";
-import type { LocalReportDraft, LocalPhoto } from "../../../src/types/database";
+import type { LocalReport, LocalPhoto } from "../../../src/types/database";
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { getReport, getPhotos } = useLocalDB();
 
-  const [report, setReport] = useState<LocalReportDraft | null>(null);
+  const [report, setReport] = useState<LocalReport | null>(null);
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);

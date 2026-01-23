@@ -1,20 +1,32 @@
 /**
  * Shared Types between Backend (Next.js) and Mobile (React Native)
- * These types MUST remain in sync with the backend to prevent serialization issues during sync.
+ * These types MUST remain in sync with the Prisma schema on the backend.
+ *
+ * Last synced with: prisma/schema.prisma
  */
 
 // ============================================
-// ENUMS
+// ENUMS - Must match Prisma enums exactly
 // ============================================
 
-export enum InspectionType {
-  FULL_INSPECTION = "FULL_INSPECTION",
-  VISUAL_ONLY = "VISUAL_ONLY",
-  NON_INVASIVE = "NON_INVASIVE",
-  INVASIVE = "INVASIVE",
-  DISPUTE_RESOLUTION = "DISPUTE_RESOLUTION",
-  PRE_PURCHASE = "PRE_PURCHASE",
-  MAINTENANCE_REVIEW = "MAINTENANCE_REVIEW",
+export enum UserRole {
+  INSPECTOR = "INSPECTOR",
+  REVIEWER = "REVIEWER",
+  ADMIN = "ADMIN",
+}
+
+export enum UserStatus {
+  ACTIVE = "ACTIVE",
+  SUSPENDED = "SUSPENDED",
+  PENDING_APPROVAL = "PENDING_APPROVAL",
+}
+
+export enum ReportStatus {
+  DRAFT = "DRAFT",
+  IN_PROGRESS = "IN_PROGRESS",
+  PENDING_REVIEW = "PENDING_REVIEW",
+  APPROVED = "APPROVED",
+  FINALISED = "FINALISED",
 }
 
 export enum PropertyType {
@@ -26,6 +38,47 @@ export enum PropertyType {
   INDUSTRIAL = "INDUSTRIAL",
 }
 
+export enum InspectionType {
+  FULL_INSPECTION = "FULL_INSPECTION",
+  VISUAL_ONLY = "VISUAL_ONLY",
+  NON_INVASIVE = "NON_INVASIVE",
+  INVASIVE = "INVASIVE",
+  DISPUTE_RESOLUTION = "DISPUTE_RESOLUTION",
+  PRE_PURCHASE = "PRE_PURCHASE",
+  MAINTENANCE_REVIEW = "MAINTENANCE_REVIEW",
+}
+
+export enum ElementType {
+  ROOF_CLADDING = "ROOF_CLADDING",
+  RIDGE = "RIDGE",
+  VALLEY = "VALLEY",
+  HIP = "HIP",
+  BARGE = "BARGE",
+  FASCIA = "FASCIA",
+  GUTTER = "GUTTER",
+  DOWNPIPE = "DOWNPIPE",
+  FLASHING_WALL = "FLASHING_WALL",
+  FLASHING_PENETRATION = "FLASHING_PENETRATION",
+  SKYLIGHT = "SKYLIGHT",
+  VENT = "VENT",
+  OTHER = "OTHER",
+}
+
+export enum ConditionRating {
+  GOOD = "GOOD",
+  FAIR = "FAIR",
+  POOR = "POOR",
+  CRITICAL = "CRITICAL",
+  NOT_INSPECTED = "NOT_INSPECTED",
+}
+
+export enum DefectClass {
+  MAJOR_DEFECT = "MAJOR_DEFECT",
+  MINOR_DEFECT = "MINOR_DEFECT",
+  SAFETY_HAZARD = "SAFETY_HAZARD",
+  MAINTENANCE_ITEM = "MAINTENANCE_ITEM",
+}
+
 export enum DefectSeverity {
   CRITICAL = "CRITICAL",
   HIGH = "HIGH",
@@ -33,33 +86,11 @@ export enum DefectSeverity {
   LOW = "LOW",
 }
 
-export enum DefectClass {
-  WEATHERTIGHTNESS = "WEATHERTIGHTNESS",
-  STRUCTURAL = "STRUCTURAL",
-  MATERIAL_FAILURE = "MATERIAL_FAILURE",
-  WORKMANSHIP = "WORKMANSHIP",
-  MAINTENANCE = "MAINTENANCE",
-  DESIGN = "DESIGN",
-  CODE_COMPLIANCE = "CODE_COMPLIANCE",
-}
-
-export enum ElementType {
-  ROOF_CLADDING = "ROOF_CLADDING",
-  FLASHING = "FLASHING",
-  GUTTER = "GUTTER",
-  DOWNPIPE = "DOWNPIPE",
-  FASCIA = "FASCIA",
-  SOFFIT = "SOFFIT",
-  RIDGE = "RIDGE",
-  VALLEY = "VALLEY",
-  HIP = "HIP",
-  PENETRATION = "PENETRATION",
-  SKYLIGHT = "SKYLIGHT",
-  VENTILATION = "VENTILATION",
-  PARAPET = "PARAPET",
-  MEMBRANE = "MEMBRANE",
-  COATING = "COATING",
-  OTHER = "OTHER",
+export enum PriorityLevel {
+  IMMEDIATE = "IMMEDIATE",
+  SHORT_TERM = "SHORT_TERM",
+  MEDIUM_TERM = "MEDIUM_TERM",
+  LONG_TERM = "LONG_TERM",
 }
 
 export enum PhotoType {
@@ -67,22 +98,19 @@ export enum PhotoType {
   CONTEXT = "CONTEXT",
   DETAIL = "DETAIL",
   SCALE_REFERENCE = "SCALE_REFERENCE",
-  BEFORE = "BEFORE",
-  AFTER = "AFTER",
+  GENERAL = "GENERAL",
 }
 
-export enum ReportStatus {
-  DRAFT = "DRAFT",
-  IN_PROGRESS = "IN_PROGRESS",
-  PENDING_REVIEW = "PENDING_REVIEW",
-  APPROVED = "APPROVED",
-  FINALISED = "FINALISED",
+export enum ComplianceStatus {
+  PASS = "PASS",
+  FAIL = "FAIL",
+  PARTIAL = "PARTIAL",
+  NOT_APPLICABLE = "NOT_APPLICABLE",
+  NOT_INSPECTED = "NOT_INSPECTED",
 }
-
-export type ComplianceStatus = "COMPLIANT" | "NON_COMPLIANT" | "PARTIAL" | "NOT_ASSESSED" | "NOT_APPLICABLE";
 
 // ============================================
-// INTERFACES
+// INTERFACES - Match Prisma models
 // ============================================
 
 export interface User {
@@ -90,18 +118,23 @@ export interface User {
   clerkId: string;
   email: string;
   name: string;
-  role: "INSPECTOR" | "ADMIN";
+  phone: string | null;
+  role: UserRole;
+  status: UserStatus;
+  company: string | null;
+  address: string | null;
   qualifications: string | null;
   lbpNumber: string | null;
   yearsExperience: number | null;
+  specialisations: string[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface Report {
   id: string;
-  reportNumber: string;
-  inspectorId: string;
+  reportNumber: string; // RANZ-YYYY-NNNNN
+  status: ReportStatus;
 
   // Property Details
   propertyAddress: string;
@@ -110,12 +143,8 @@ export interface Report {
   propertyPostcode: string;
   propertyType: PropertyType;
   buildingAge: number | null;
-
-  // Client Details
-  clientName: string;
-  clientEmail: string | null;
-  clientPhone: string | null;
-  clientCompany: string | null;
+  gpsLat: number | null;
+  gpsLng: number | null;
 
   // Inspection Details
   inspectionDate: string;
@@ -124,25 +153,37 @@ export interface Report {
   accessMethod: string | null;
   limitations: string | null;
 
-  // Report Content
-  executiveSummary: string | null;
-  scopeOfWork: string | null;
-  conclusions: string | null;
-  recommendations: string | null;
+  // Client Information
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
 
-  // Status
-  status: ReportStatus;
+  // Report Content (JSON fields)
+  scopeOfWorks: Record<string, unknown> | null;
+  methodology: Record<string, unknown> | null;
+  findings: Record<string, unknown> | null;
+  conclusions: Record<string, unknown> | null;
+  recommendations: Record<string, unknown> | null;
+
+  // Sign-off
+  declarationSigned: boolean;
+  signedAt: string | null;
+
+  // PDF
+  pdfUrl: string | null;
   pdfGeneratedAt: string | null;
 
   // Timestamps
   createdAt: string;
   updatedAt: string;
+  submittedAt: string | null;
 
-  // Relations (populated when needed)
+  // Relations
+  inspectorId: string;
   inspector?: User;
-  roofElements?: RoofElement[];
-  defects?: Defect[];
   photos?: Photo[];
+  defects?: Defect[];
+  roofElements?: RoofElement[];
   complianceAssessment?: ComplianceAssessment | null;
 }
 
@@ -151,20 +192,21 @@ export interface RoofElement {
   reportId: string;
 
   elementType: ElementType;
-  name: string;
+  location: string;
+  claddingType: string | null;
   material: string | null;
   manufacturer: string | null;
-  condition: string | null;
-  age: number | null;
+  pitch: number | null;
   area: number | null;
-  notes: string | null;
+  conditionRating: ConditionRating | null;
+  conditionNotes: string | null;
 
   createdAt: string;
   updatedAt: string;
 
   // Relations
-  photos?: Photo[];
   defects?: Defect[];
+  photos?: Photo[];
 }
 
 export interface Defect {
@@ -180,16 +222,16 @@ export interface Defect {
   classification: DefectClass;
   severity: DefectSeverity;
 
+  // Three-part structure (ISO compliant)
   observation: string;
   analysis: string | null;
   opinion: string | null;
 
-  codeReference: string | null;
-  copReference: string | null;
+  codeReference: string | null; // E2/AS1 Section X
+  copReference: string | null; // COP v25.12 Section X
 
   recommendation: string | null;
-  priorityLevel: string | null;
-  estimatedCost: number | null;
+  priorityLevel: PriorityLevel | null;
 
   createdAt: string;
   updatedAt: string;
@@ -235,40 +277,21 @@ export interface ComplianceAssessment {
   id: string;
   reportId: string;
 
-  checklistResults: {
-    [checklistKey: string]: {
-      [itemId: string]: ComplianceStatus;
-    };
-  };
-
+  // Results for each checklist: {e2_as1: {item_1: "PASS", ...}, ...}
+  checklistResults: Record<string, Record<string, ComplianceStatus>>;
   nonComplianceSummary: string | null;
 
   createdAt: string;
   updatedAt: string;
 }
 
-export interface ChecklistItem {
-  ref: string;
-  item: string;
-  description: string;
-  required?: boolean;
-}
-
-export interface ChecklistSection {
-  title: string;
-  items: ChecklistItem[];
-}
-
-export interface Checklist {
+export interface AuditLog {
   id: string;
-  name: string;
-  version?: string;
-  category: string;
-  standard: string;
-  sections?: ChecklistSection[];
-  items?: ChecklistItem[];
+  reportId: string;
+  action: string;
+  userId: string;
+  details: Record<string, unknown> | null;
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface ReportTemplate {
@@ -277,13 +300,30 @@ export interface ReportTemplate {
   description: string | null;
   inspectionType: InspectionType;
   sections: string[];
-  checklists: {
-    compliance?: string[];
-  } | null;
+  checklists: { compliance?: string[] } | null;
   isDefault: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Checklist {
+  id: string;
+  name: string;
+  category: string;
+  standard: string | null;
+  items: ChecklistItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChecklistItem {
+  id: string;
+  section: string;
+  item: string;
+  description: string;
+  required?: boolean;
+  notes?: string;
 }
 
 // ============================================
@@ -337,4 +377,139 @@ export interface SyncQueueItem {
 
 export type SyncStatus = "draft" | "pending" | "synced" | "error";
 
-export type PhotoSyncStatus = "captured" | "processing" | "uploaded" | "synced";
+export type PhotoSyncStatus = "captured" | "processing" | "uploaded" | "synced" | "error";
+
+// ============================================
+// SYNC UPLOAD TYPES (match server endpoint)
+// ============================================
+
+export interface SyncUploadPayload {
+  reports: ReportSync[];
+  deviceId: string;
+  syncTimestamp: string;
+}
+
+export interface ReportSync {
+  id: string;
+  reportNumber: string;
+  status: ReportStatus;
+  propertyAddress: string;
+  propertyCity: string;
+  propertyRegion: string;
+  propertyPostcode: string;
+  propertyType: PropertyType;
+  buildingAge: number | null;
+  gpsLat: number | null;
+  gpsLng: number | null;
+  inspectionDate: string;
+  inspectionType: InspectionType;
+  weatherConditions: string | null;
+  accessMethod: string | null;
+  limitations: string | null;
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
+  scopeOfWorks: Record<string, unknown> | null;
+  methodology: Record<string, unknown> | null;
+  findings: Record<string, unknown> | null;
+  conclusions: Record<string, unknown> | null;
+  recommendations: Record<string, unknown> | null;
+  declarationSigned: boolean;
+  signedAt: string | null;
+  clientUpdatedAt: string;
+  elements?: RoofElementSync[];
+  defects?: DefectSync[];
+  compliance?: ComplianceAssessmentSync | null;
+  photoMetadata?: PhotoMetadataSync[];
+}
+
+export interface RoofElementSync {
+  id: string;
+  elementType: ElementType;
+  location: string;
+  claddingType: string | null;
+  material: string | null;
+  manufacturer: string | null;
+  pitch: number | null;
+  area: number | null;
+  conditionRating: ConditionRating | null;
+  conditionNotes: string | null;
+  clientUpdatedAt?: string;
+  _deleted?: boolean;
+}
+
+export interface DefectSync {
+  id: string;
+  defectNumber: number;
+  title: string;
+  description: string;
+  location: string;
+  classification: DefectClass;
+  severity: DefectSeverity;
+  observation: string;
+  analysis: string | null;
+  opinion: string | null;
+  codeReference: string | null;
+  copReference: string | null;
+  recommendation: string | null;
+  priorityLevel: PriorityLevel | null;
+  roofElementId: string | null;
+  clientUpdatedAt?: string;
+  _deleted?: boolean;
+}
+
+export interface ComplianceAssessmentSync {
+  id: string;
+  checklistResults: Record<string, Record<string, ComplianceStatus>>;
+  nonComplianceSummary: string | null;
+  clientUpdatedAt?: string;
+}
+
+export interface PhotoMetadataSync {
+  id: string;
+  photoType: PhotoType;
+  filename: string;
+  originalFilename: string;
+  mimeType: string;
+  fileSize: number;
+  capturedAt: string | null;
+  gpsLat: number | null;
+  gpsLng: number | null;
+  cameraMake: string | null;
+  cameraModel: string | null;
+  originalHash: string;
+  caption: string | null;
+  sortOrder: number;
+  defectId: string | null;
+  roofElementId: string | null;
+  needsUpload?: boolean;
+  clientUpdatedAt?: string;
+  _deleted?: boolean;
+}
+
+export interface SyncUploadResponse {
+  success: boolean;
+  timestamp: string;
+  processingTimeMs: number;
+  stats: {
+    total: number;
+    succeeded: number;
+    failed: number;
+    conflicts: number;
+  };
+  results: {
+    syncedReports: string[];
+    failedReports: { reportId: string; error: string }[];
+    conflicts: {
+      reportId: string;
+      resolution: string;
+      serverUpdatedAt: string;
+      clientUpdatedAt: string;
+    }[];
+    pendingPhotoUploads: {
+      reportId: string;
+      photoId: string;
+      uploadUrl: string;
+    }[];
+  };
+}

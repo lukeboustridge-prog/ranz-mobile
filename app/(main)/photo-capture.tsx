@@ -149,7 +149,7 @@ export default function PhotoCaptureScreen() {
           </Text>
         )}
       </View>
-      {item.status === "captured" && (
+      {item.syncStatus === "captured" && (
         <View style={styles.pendingBadge}>
           <Text style={styles.pendingText}>Pending</Text>
         </View>

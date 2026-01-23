@@ -1,6 +1,8 @@
 /**
  * Local SQLite Database Types
  * Types for offline-first storage on mobile device
+ *
+ * This schema mirrors the Prisma schema from the web backend.
  */
 
 import type {
@@ -10,10 +12,13 @@ import type {
   PhotoType,
   DefectClass,
   DefectSeverity,
+  PriorityLevel,
   ElementType,
+  ConditionRating,
   SyncStatus,
   PhotoSyncStatus,
   ComplianceStatus,
+  UserRole,
 } from "./shared";
 
 // ============================================
@@ -25,16 +30,19 @@ export interface LocalUser {
   clerkId: string;
   email: string;
   name: string;
-  role: string;
+  phone: string | null;
+  role: UserRole;
+  company: string | null;
   qualifications: string | null;
   lbpNumber: string | null;
+  yearsExperience: number | null;
   syncedAt: string | null;
 }
 
-export interface LocalReportDraft {
+export interface LocalReport {
   id: string;
-  reportId: string | null; // null if not yet synced to server
-  reportNumber: string | null;
+  reportNumber: string | null; // null until synced, server generates RANZ-YYYY-NNNNN
+  status: ReportStatus;
 
   // Property Details
   propertyAddress: string;
@@ -43,11 +51,8 @@ export interface LocalReportDraft {
   propertyPostcode: string;
   propertyType: PropertyType;
   buildingAge: number | null;
-
-  // Client Details
-  clientName: string;
-  clientEmail: string | null;
-  clientPhone: string | null;
+  gpsLat: number | null;
+  gpsLng: number | null;
 
   // Inspection Details
   inspectionDate: string;
@@ -56,12 +61,21 @@ export interface LocalReportDraft {
   accessMethod: string | null;
   limitations: string | null;
 
-  // Report Content
-  executiveSummary: string | null;
-  conclusions: string | null;
+  // Client Information
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
 
-  // Status
-  status: ReportStatus;
+  // Report Content (stored as JSON strings)
+  scopeOfWorksJson: string | null;
+  methodologyJson: string | null;
+  findingsJson: string | null;
+  conclusionsJson: string | null;
+  recommendationsJson: string | null;
+
+  // Sign-off
+  declarationSigned: boolean;
+  signedAt: string | null;
 
   // Sync tracking
   syncStatus: SyncStatus;
@@ -71,9 +85,60 @@ export interface LocalReportDraft {
   lastSyncError: string | null;
 }
 
+export interface LocalRoofElement {
+  id: string;
+  reportId: string;
+
+  elementType: ElementType;
+  location: string;
+  claddingType: string | null;
+  material: string | null;
+  manufacturer: string | null;
+  pitch: number | null;
+  area: number | null;
+  conditionRating: ConditionRating | null;
+  conditionNotes: string | null;
+
+  // Sync tracking
+  syncStatus: SyncStatus;
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string | null;
+}
+
+export interface LocalDefect {
+  id: string;
+  reportId: string;
+  roofElementId: string | null;
+
+  defectNumber: number;
+  title: string;
+  description: string;
+  location: string;
+
+  classification: DefectClass;
+  severity: DefectSeverity;
+
+  // Three-part structure (ISO compliant)
+  observation: string;
+  analysis: string | null;
+  opinion: string | null;
+
+  codeReference: string | null;
+  copReference: string | null;
+
+  recommendation: string | null;
+  priorityLevel: PriorityLevel | null;
+
+  // Sync tracking
+  syncStatus: SyncStatus;
+  createdAt: string;
+  updatedAt: string;
+  syncedAt: string | null;
+}
+
 export interface LocalPhoto {
   id: string;
-  localId: string; // Unique ID generated locally
   reportId: string;
   defectId: string | null;
   roofElementId: string | null;
@@ -81,6 +146,7 @@ export interface LocalPhoto {
   // Local file info
   localUri: string;
   thumbnailUri: string | null;
+  filename: string;
   originalFilename: string;
   mimeType: string;
   fileSize: number;
@@ -107,7 +173,7 @@ export interface LocalPhoto {
   sortOrder: number;
 
   // Sync tracking
-  status: PhotoSyncStatus;
+  syncStatus: PhotoSyncStatus;
   uploadedUrl: string | null;
   syncedAt: string | null;
   lastSyncError: string | null;
@@ -115,64 +181,11 @@ export interface LocalPhoto {
   createdAt: string;
 }
 
-export interface LocalDefect {
-  id: string;
-  localId: string;
-  reportId: string;
-  roofElementId: string | null;
-
-  defectNumber: number;
-  title: string;
-  description: string;
-  location: string;
-
-  classification: DefectClass;
-  severity: DefectSeverity;
-
-  observation: string;
-  analysis: string | null;
-  opinion: string | null;
-
-  codeReference: string | null;
-  copReference: string | null;
-
-  recommendation: string | null;
-  priorityLevel: string | null;
-
-  // Sync tracking
-  syncStatus: SyncStatus;
-  createdAt: string;
-  updatedAt: string;
-  syncedAt: string | null;
-}
-
-export interface LocalRoofElement {
-  id: string;
-  localId: string;
-  reportId: string;
-
-  elementType: ElementType;
-  name: string;
-  material: string | null;
-  manufacturer: string | null;
-  condition: string | null;
-  age: number | null;
-  area: number | null;
-  notes: string | null;
-
-  // Sync tracking
-  syncStatus: SyncStatus;
-  createdAt: string;
-  updatedAt: string;
-  syncedAt: string | null;
-}
-
 export interface LocalComplianceAssessment {
   id: string;
-  localId: string;
   reportId: string;
 
-  // Stored as JSON string
+  // Stored as JSON string: {e2_as1: {item_1: "PASS", ...}, ...}
   checklistResultsJson: string;
   nonComplianceSummary: string | null;
 
@@ -186,25 +199,10 @@ export interface LocalComplianceAssessment {
 export interface LocalChecklist {
   id: string;
   name: string;
-  version: string;
   category: string;
-  standard: string;
-  definition: string; // JSON string of checklist definition
+  standard: string | null;
+  itemsJson: string; // JSON string of ChecklistItem[]
   downloadedAt: string;
-}
-
-export interface LocalComplianceResult {
-  id: string;
-  reportId: string;
-  checklistId: string;
-  itemRef: string;
-  itemDescription: string;
-  status: ComplianceStatus;
-  notes: string | null;
-  evidencePhotoIds: string | null; // JSON array of photo IDs
-  assessedAt: string;
-  syncStatus: SyncStatus;
-  createdAt: string;
   updatedAt: string;
 }
 
@@ -214,7 +212,7 @@ export interface LocalTemplate {
   description: string | null;
   inspectionType: InspectionType;
   sectionsJson: string; // JSON string of string[]
-  checklistsJson: string | null;
+  checklistsJson: string | null; // JSON string of { compliance?: string[] }
   isDefault: boolean;
   downloadedAt: string;
 }
@@ -230,48 +228,84 @@ export interface LocalSyncQueue {
   lastError: string | null;
 }
 
+export interface LocalSyncState {
+  id: number;
+  lastBootstrapAt: string | null;
+  lastUploadAt: string | null;
+  deviceId: string;
+}
+
 // ============================================
 // DATABASE SCHEMA CREATION
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 1;
+export const DATABASE_VERSION = 2; // Incremented for schema changes
 
 export const CREATE_TABLES_SQL = `
+-- Sync State (singleton table for tracking sync metadata)
+CREATE TABLE IF NOT EXISTS sync_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_bootstrap_at TEXT,
+  last_upload_at TEXT,
+  device_id TEXT NOT NULL
+);
+
 -- Users (for offline auth state)
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   clerk_id TEXT UNIQUE NOT NULL,
   email TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
-  role TEXT NOT NULL,
+  phone TEXT,
+  role TEXT NOT NULL DEFAULT 'INSPECTOR',
+  company TEXT,
   qualifications TEXT,
   lbp_number TEXT,
+  years_experience INTEGER,
   synced_at TEXT
 );
 
--- Report Drafts (local report drafts)
-CREATE TABLE IF NOT EXISTS report_drafts (
+-- Reports (local report data, mirrors Prisma Report model)
+CREATE TABLE IF NOT EXISTS reports (
   id TEXT PRIMARY KEY,
-  report_id TEXT,
   report_number TEXT,
+  status TEXT NOT NULL DEFAULT 'DRAFT',
+
+  -- Property Details
   property_address TEXT NOT NULL,
   property_city TEXT NOT NULL,
   property_region TEXT NOT NULL,
   property_postcode TEXT NOT NULL,
   property_type TEXT NOT NULL,
   building_age INTEGER,
-  client_name TEXT NOT NULL,
-  client_email TEXT,
-  client_phone TEXT,
+  gps_lat REAL,
+  gps_lng REAL,
+
+  -- Inspection Details
   inspection_date TEXT NOT NULL,
   inspection_type TEXT NOT NULL,
   weather_conditions TEXT,
   access_method TEXT,
   limitations TEXT,
-  executive_summary TEXT,
-  conclusions TEXT,
-  status TEXT NOT NULL DEFAULT 'DRAFT',
+
+  -- Client Information
+  client_name TEXT NOT NULL,
+  client_email TEXT,
+  client_phone TEXT,
+
+  -- Report Content (JSON strings)
+  scope_of_works_json TEXT,
+  methodology_json TEXT,
+  findings_json TEXT,
+  conclusions_json TEXT,
+  recommendations_json TEXT,
+
+  -- Sign-off
+  declaration_signed INTEGER NOT NULL DEFAULT 0,
+  signed_at TEXT,
+
+  -- Sync tracking
   sync_status TEXT NOT NULL DEFAULT 'draft',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -279,19 +313,83 @@ CREATE TABLE IF NOT EXISTS report_drafts (
   last_sync_error TEXT
 );
 
--- Photos (local photo cache)
+-- Roof Elements (mirrors Prisma RoofElement model)
+CREATE TABLE IF NOT EXISTS roof_elements (
+  id TEXT PRIMARY KEY,
+  report_id TEXT NOT NULL,
+
+  element_type TEXT NOT NULL,
+  location TEXT NOT NULL,
+  cladding_type TEXT,
+  material TEXT,
+  manufacturer TEXT,
+  pitch REAL,
+  area REAL,
+  condition_rating TEXT,
+  condition_notes TEXT,
+
+  -- Sync tracking
+  sync_status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  synced_at TEXT,
+
+  FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE
+);
+
+-- Defects (mirrors Prisma Defect model)
+CREATE TABLE IF NOT EXISTS defects (
+  id TEXT PRIMARY KEY,
+  report_id TEXT NOT NULL,
+  roof_element_id TEXT,
+
+  defect_number INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  location TEXT NOT NULL,
+
+  classification TEXT NOT NULL,
+  severity TEXT NOT NULL,
+
+  -- Three-part structure (ISO compliant)
+  observation TEXT NOT NULL,
+  analysis TEXT,
+  opinion TEXT,
+
+  code_reference TEXT,
+  cop_reference TEXT,
+
+  recommendation TEXT,
+  priority_level TEXT,
+
+  -- Sync tracking
+  sync_status TEXT NOT NULL DEFAULT 'draft',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  synced_at TEXT,
+
+  FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+  FOREIGN KEY (roof_element_id) REFERENCES roof_elements(id) ON DELETE SET NULL
+);
+
+-- Photos (mirrors Prisma Photo model with local file tracking)
 CREATE TABLE IF NOT EXISTS photos (
   id TEXT PRIMARY KEY,
-  local_id TEXT UNIQUE NOT NULL,
   report_id TEXT NOT NULL,
   defect_id TEXT,
   roof_element_id TEXT,
+
+  -- Local file info
   local_uri TEXT NOT NULL,
   thumbnail_uri TEXT,
+  filename TEXT NOT NULL,
   original_filename TEXT NOT NULL,
   mime_type TEXT NOT NULL,
   file_size INTEGER NOT NULL,
+
   photo_type TEXT NOT NULL,
+
+  -- EXIF Metadata (critical for evidence)
   captured_at TEXT,
   gps_lat REAL,
   gps_lng REAL,
@@ -303,104 +401,52 @@ CREATE TABLE IF NOT EXISTS photos (
   f_number REAL,
   iso INTEGER,
   focal_length REAL,
+
+  -- Evidence integrity
   original_hash TEXT NOT NULL,
+
   caption TEXT,
   sort_order INTEGER DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'captured',
+
+  -- Sync tracking
+  sync_status TEXT NOT NULL DEFAULT 'captured',
   uploaded_url TEXT,
   synced_at TEXT,
   last_sync_error TEXT,
+
   created_at TEXT NOT NULL,
-  FOREIGN KEY (report_id) REFERENCES report_drafts(id) ON DELETE CASCADE
+
+  FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE,
+  FOREIGN KEY (defect_id) REFERENCES defects(id) ON DELETE SET NULL,
+  FOREIGN KEY (roof_element_id) REFERENCES roof_elements(id) ON DELETE SET NULL
 );
 
--- Defects
-CREATE TABLE IF NOT EXISTS defects (
-  id TEXT PRIMARY KEY,
-  local_id TEXT UNIQUE NOT NULL,
-  report_id TEXT NOT NULL,
-  roof_element_id TEXT,
-  defect_number INTEGER NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT NOT NULL,
-  location TEXT NOT NULL,
-  classification TEXT NOT NULL,
-  severity TEXT NOT NULL,
-  observation TEXT NOT NULL,
-  analysis TEXT,
-  opinion TEXT,
-  code_reference TEXT,
-  cop_reference TEXT,
-  recommendation TEXT,
-  priority_level TEXT,
-  sync_status TEXT NOT NULL DEFAULT 'draft',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  synced_at TEXT,
-  FOREIGN KEY (report_id) REFERENCES report_drafts(id) ON DELETE CASCADE
-);
-
--- Roof Elements
-CREATE TABLE IF NOT EXISTS roof_elements (
-  id TEXT PRIMARY KEY,
-  local_id TEXT UNIQUE NOT NULL,
-  report_id TEXT NOT NULL,
-  element_type TEXT NOT NULL,
-  name TEXT NOT NULL,
-  material TEXT,
-  manufacturer TEXT,
-  condition TEXT,
-  age INTEGER,
-  area REAL,
-  notes TEXT,
-  sync_status TEXT NOT NULL DEFAULT 'draft',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  synced_at TEXT,
-  FOREIGN KEY (report_id) REFERENCES report_drafts(id) ON DELETE CASCADE
-);
-
--- Compliance Assessments
+-- Compliance Assessments (mirrors Prisma ComplianceAssessment model)
 CREATE TABLE IF NOT EXISTS compliance_assessments (
   id TEXT PRIMARY KEY,
-  local_id TEXT UNIQUE NOT NULL,
   report_id TEXT UNIQUE NOT NULL,
+
   checklist_results_json TEXT NOT NULL,
   non_compliance_summary TEXT,
+
+  -- Sync tracking
   sync_status TEXT NOT NULL DEFAULT 'draft',
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   synced_at TEXT,
-  FOREIGN KEY (report_id) REFERENCES report_drafts(id) ON DELETE CASCADE
+
+  FOREIGN KEY (report_id) REFERENCES reports(id) ON DELETE CASCADE
 );
 
 -- Checklists (downloaded from server)
 CREATE TABLE IF NOT EXISTS checklists (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  version TEXT NOT NULL DEFAULT '1.0',
   category TEXT NOT NULL,
-  standard TEXT NOT NULL,
-  definition TEXT NOT NULL,
-  downloaded_at TEXT NOT NULL
-);
-
--- Compliance Results (individual item assessments)
-CREATE TABLE IF NOT EXISTS compliance_results (
-  id TEXT PRIMARY KEY,
-  report_id TEXT NOT NULL,
-  checklist_id TEXT NOT NULL,
-  item_ref TEXT NOT NULL,
-  item_description TEXT NOT NULL,
-  status TEXT NOT NULL,
-  notes TEXT,
-  evidence_photo_ids TEXT,
-  assessed_at TEXT NOT NULL,
-  sync_status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (report_id) REFERENCES report_drafts(id) ON DELETE CASCADE,
-  FOREIGN KEY (checklist_id) REFERENCES checklists(id)
+  standard TEXT,
+  items_json TEXT NOT NULL,
+  downloaded_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 
 -- Templates (downloaded from server)
@@ -427,13 +473,51 @@ CREATE TABLE IF NOT EXISTS sync_queue (
   last_error TEXT
 );
 
--- Indices for performance
-CREATE INDEX IF NOT EXISTS idx_photos_report_id ON photos(report_id);
-CREATE INDEX IF NOT EXISTS idx_photos_status ON photos(status);
-CREATE INDEX IF NOT EXISTS idx_defects_report_id ON defects(report_id);
+-- ============================================
+-- INDICES for performance
+-- ============================================
+
+CREATE INDEX IF NOT EXISTS idx_reports_sync_status ON reports(sync_status);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
+CREATE INDEX IF NOT EXISTS idx_reports_updated_at ON reports(updated_at);
+
 CREATE INDEX IF NOT EXISTS idx_roof_elements_report_id ON roof_elements(report_id);
+CREATE INDEX IF NOT EXISTS idx_roof_elements_sync_status ON roof_elements(sync_status);
+
+CREATE INDEX IF NOT EXISTS idx_defects_report_id ON defects(report_id);
+CREATE INDEX IF NOT EXISTS idx_defects_roof_element_id ON defects(roof_element_id);
+CREATE INDEX IF NOT EXISTS idx_defects_sync_status ON defects(sync_status);
+
+CREATE INDEX IF NOT EXISTS idx_photos_report_id ON photos(report_id);
+CREATE INDEX IF NOT EXISTS idx_photos_defect_id ON photos(defect_id);
+CREATE INDEX IF NOT EXISTS idx_photos_roof_element_id ON photos(roof_element_id);
+CREATE INDEX IF NOT EXISTS idx_photos_sync_status ON photos(sync_status);
+
+CREATE INDEX IF NOT EXISTS idx_compliance_report_id ON compliance_assessments(report_id);
+
 CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_report_drafts_sync_status ON report_drafts(sync_status);
-CREATE INDEX IF NOT EXISTS idx_compliance_results_report ON compliance_results(report_id);
-CREATE INDEX IF NOT EXISTS idx_compliance_results_checklist ON compliance_results(checklist_id);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_created ON sync_queue(created_at);
+
+CREATE INDEX IF NOT EXISTS idx_checklists_standard ON checklists(standard);
+CREATE INDEX IF NOT EXISTS idx_checklists_category ON checklists(category);
 `;
+
+// ============================================
+// MIGRATION SCRIPTS
+// ============================================
+
+export const MIGRATIONS: { version: number; sql: string }[] = [
+  {
+    version: 2,
+    sql: `
+      -- Migration from v1 to v2: Restructure to match Prisma schema
+      -- This is a destructive migration - data will need to be re-synced
+
+      -- Drop old tables if they exist
+      DROP TABLE IF EXISTS report_drafts;
+      DROP TABLE IF EXISTS compliance_results;
+
+      -- Rename indices if needed (handled by CREATE IF NOT EXISTS above)
+    `,
+  },
+];

@@ -15,15 +15,14 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useLocalDB } from "../../src/hooks/useLocalDB";
-import type { LocalChecklist, LocalComplianceResult } from "../../src/types/database";
-
-type ComplianceStatus = "COMPLIANT" | "NON_COMPLIANT" | "PARTIAL" | "NOT_ASSESSED" | "NOT_APPLICABLE";
+import type { LocalChecklist, LocalComplianceAssessment } from "../../src/types/database";
+import { ComplianceStatus } from "../../src/types/shared";
 
 interface ChecklistItem {
-  ref: string;
+  id: string;
+  section: string;
   item: string;
   description: string;
-  section: string;
 }
 
 interface ItemResult {
@@ -32,16 +31,16 @@ interface ItemResult {
 }
 
 const STATUS_OPTIONS: { value: ComplianceStatus; label: string; color: string }[] = [
-  { value: "COMPLIANT", label: "Compliant", color: "#22c55e" },
-  { value: "NON_COMPLIANT", label: "Non-Compliant", color: "#ef4444" },
-  { value: "PARTIAL", label: "Partial", color: "#f59e0b" },
-  { value: "NOT_APPLICABLE", label: "N/A", color: "#6b7280" },
+  { value: ComplianceStatus.PASS, label: "Pass", color: "#22c55e" },
+  { value: ComplianceStatus.FAIL, label: "Fail", color: "#ef4444" },
+  { value: ComplianceStatus.PARTIAL, label: "Partial", color: "#f59e0b" },
+  { value: ComplianceStatus.NOT_APPLICABLE, label: "N/A", color: "#6b7280" },
 ];
 
 export default function ComplianceAssessmentScreen() {
   const { reportId } = useLocalSearchParams<{ reportId: string }>();
   const router = useRouter();
-  const { getChecklists, getComplianceResults, saveComplianceResult } = useLocalDB();
+  const { getChecklists, getComplianceAssessment, saveComplianceAssessment } = useLocalDB();
 
   const [checklists, setChecklists] = useState<LocalChecklist[]>([]);
   const [selectedChecklist, setSelectedChecklist] = useState<LocalChecklist | null>(null);
@@ -69,17 +68,21 @@ export default function ComplianceAssessmentScreen() {
         selectChecklist(loadedChecklists[0]);
       }
 
-      // Load existing results for this report
+      // Load existing assessment for this report
       if (reportId) {
-        const existingResults = await getComplianceResults(reportId);
-        const resultsMap = new Map<string, ItemResult>();
-        existingResults.forEach((r) => {
-          resultsMap.set(r.itemRef, {
-            status: r.status as ComplianceStatus,
-            notes: r.notes || "",
-          });
-        });
-        setResults(resultsMap);
+        const existingAssessment = await getComplianceAssessment(reportId);
+        if (existingAssessment) {
+          const resultsMap = new Map<string, ItemResult>();
+          const checklistResults = JSON.parse(existingAssessment.checklistResultsJson) as Record<string, Record<string, ComplianceStatus>>;
+
+          // Flatten checklist results into item results
+          for (const [_checklistId, items] of Object.entries(checklistResults)) {
+            for (const [itemId, status] of Object.entries(items)) {
+              resultsMap.set(itemId, { status, notes: "" });
+            }
+          }
+          setResults(resultsMap);
+        }
       }
     } catch (error) {
       console.error("Failed to load data:", error);
@@ -91,26 +94,22 @@ export default function ComplianceAssessmentScreen() {
   const selectChecklist = (checklist: LocalChecklist) => {
     setSelectedChecklist(checklist);
 
-    // Parse checklist definition
+    // Parse checklist items from JSON
     try {
-      const def = JSON.parse(checklist.definition);
+      const parsedItems = JSON.parse(checklist.itemsJson) as ChecklistItem[];
       const items: ChecklistItem[] = [];
       const sectionSet = new Set<string>();
 
-      // Extract items from sections
-      if (def.sections && Array.isArray(def.sections)) {
-        def.sections.forEach((section: { title: string; items?: Array<{ ref: string; item: string; description: string }> }) => {
-          sectionSet.add(section.title);
-          if (section.items && Array.isArray(section.items)) {
-            section.items.forEach((item) => {
-              items.push({
-                ref: item.ref,
-                item: item.item,
-                description: item.description,
-                section: section.title,
-              });
-            });
-          }
+      // Extract items and sections
+      if (Array.isArray(parsedItems)) {
+        parsedItems.forEach((item) => {
+          sectionSet.add(item.section || "General");
+          items.push({
+            id: item.id,
+            section: item.section || "General",
+            item: item.item,
+            description: item.description,
+          });
         });
       }
 
@@ -130,20 +129,20 @@ export default function ComplianceAssessmentScreen() {
     return checklistItems.filter((item) => item.section === currentSection);
   }, [checklistItems, currentSection]);
 
-  const updateItemStatus = (ref: string, status: ComplianceStatus) => {
+  const updateItemStatus = (id: string, status: ComplianceStatus) => {
     setResults((prev) => {
       const newMap = new Map(prev);
-      const existing = newMap.get(ref) || { status: "NOT_ASSESSED", notes: "" };
-      newMap.set(ref, { ...existing, status });
+      const existing = newMap.get(id) || { status: ComplianceStatus.NOT_INSPECTED, notes: "" };
+      newMap.set(id, { ...existing, status });
       return newMap;
     });
   };
 
-  const updateItemNotes = (ref: string, notes: string) => {
+  const updateItemNotes = (id: string, notes: string) => {
     setResults((prev) => {
       const newMap = new Map(prev);
-      const existing = newMap.get(ref) || { status: "NOT_ASSESSED", notes: "" };
-      newMap.set(ref, { ...existing, notes });
+      const existing = newMap.get(id) || { status: ComplianceStatus.NOT_INSPECTED, notes: "" };
+      newMap.set(id, { ...existing, notes });
       return newMap;
     });
   };
@@ -155,28 +154,39 @@ export default function ComplianceAssessmentScreen() {
     try {
       const now = new Date().toISOString();
 
-      // Save each result
-      for (const [itemRef, result] of results.entries()) {
-        const item = checklistItems.find((i) => i.ref === itemRef);
-        if (!item || result.status === "NOT_ASSESSED") continue;
+      // Build checklist results structure
+      const checklistResults: Record<string, Record<string, ComplianceStatus>> = {
+        [selectedChecklist.id]: {},
+      };
 
-        const complianceResult: LocalComplianceResult = {
-          id: `${reportId}_${selectedChecklist.id}_${itemRef}`,
-          reportId,
-          checklistId: selectedChecklist.id,
-          itemRef,
-          itemDescription: item.description,
-          status: result.status,
-          notes: result.notes || null,
-          evidencePhotoIds: null,
-          assessedAt: now,
-          syncStatus: "pending",
-          createdAt: now,
-          updatedAt: now,
-        };
-
-        await saveComplianceResult(complianceResult);
+      for (const [itemId, result] of results.entries()) {
+        if (result.status !== ComplianceStatus.NOT_INSPECTED) {
+          checklistResults[selectedChecklist.id][itemId] = result.status;
+        }
       }
+
+      // Build non-compliance summary
+      const nonCompliantItems = checklistItems.filter((item) => {
+        const result = results.get(item.id);
+        return result && result.status === ComplianceStatus.FAIL;
+      });
+
+      const nonComplianceSummary = nonCompliantItems.length > 0
+        ? nonCompliantItems.map((item) => `${item.item}: ${item.description}`).join("\n")
+        : null;
+
+      const assessment: LocalComplianceAssessment = {
+        id: `${reportId}_compliance`,
+        reportId,
+        checklistResultsJson: JSON.stringify(checklistResults),
+        nonComplianceSummary,
+        syncStatus: "pending",
+        createdAt: now,
+        updatedAt: now,
+        syncedAt: null,
+      };
+
+      await saveComplianceAssessment(assessment);
 
       Alert.alert("Success", "Compliance assessment saved", [
         { text: "OK", onPress: () => router.back() },
@@ -192,7 +202,7 @@ export default function ComplianceAssessmentScreen() {
   const getProgress = () => {
     const total = checklistItems.length;
     const assessed = Array.from(results.values()).filter(
-      (r) => r.status !== "NOT_ASSESSED"
+      (r) => r.status !== ComplianceStatus.NOT_INSPECTED
     ).length;
     return { assessed, total, percentage: total > 0 ? (assessed / total) * 100 : 0 };
   };
@@ -200,8 +210,8 @@ export default function ComplianceAssessmentScreen() {
   const getSectionProgress = (section: string) => {
     const sectionItems = checklistItems.filter((i) => i.section === section);
     const assessed = sectionItems.filter((i) => {
-      const result = results.get(i.ref);
-      return result && result.status !== "NOT_ASSESSED";
+      const result = results.get(i.id);
+      return result && result.status !== ComplianceStatus.NOT_INSPECTED;
     }).length;
     return { assessed, total: sectionItems.length };
   };
@@ -253,8 +263,8 @@ export default function ComplianceAssessmentScreen() {
                 onPress={() => selectChecklist(checklist)}
               >
                 <Text style={styles.checklistName}>{checklist.name}</Text>
-                <Text style={styles.checklistVersion}>
-                  Version {checklist.version}
+                <Text style={styles.checklistCategory}>
+                  {checklist.category}
                 </Text>
                 <Text style={styles.checklistArrow}>→</Text>
               </TouchableOpacity>
@@ -330,23 +340,23 @@ export default function ComplianceAssessmentScreen() {
       {/* Checklist Items */}
       <ScrollView style={styles.itemsList} contentContainerStyle={styles.itemsListContent}>
         {currentItems.map((item) => {
-          const result = results.get(item.ref) || { status: "NOT_ASSESSED", notes: "" };
-          const isExpanded = expandedItem === item.ref;
+          const result = results.get(item.id) || { status: ComplianceStatus.NOT_INSPECTED, notes: "" };
+          const isExpanded = expandedItem === item.id;
           const statusOption = STATUS_OPTIONS.find((s) => s.value === result.status);
 
           return (
-            <View key={item.ref} style={styles.itemCard}>
+            <View key={item.id} style={styles.itemCard}>
               <TouchableOpacity
                 style={styles.itemHeader}
-                onPress={() => setExpandedItem(isExpanded ? null : item.ref)}
+                onPress={() => setExpandedItem(isExpanded ? null : item.id)}
               >
                 <View style={styles.itemInfo}>
-                  <Text style={styles.itemRef}>{item.ref}</Text>
+                  <Text style={styles.itemRef}>{item.id}</Text>
                   <Text style={styles.itemTitle} numberOfLines={2}>
                     {item.item}
                   </Text>
                 </View>
-                {result.status !== "NOT_ASSESSED" && (
+                {result.status !== ComplianceStatus.NOT_INSPECTED && (
                   <View
                     style={[
                       styles.statusBadge,
@@ -377,7 +387,7 @@ export default function ComplianceAssessmentScreen() {
                             borderColor: option.color,
                           },
                         ]}
-                        onPress={() => updateItemStatus(item.ref, option.value)}
+                        onPress={() => updateItemStatus(item.id, option.value)}
                       >
                         <Text
                           style={[
@@ -396,7 +406,7 @@ export default function ComplianceAssessmentScreen() {
                   <TextInput
                     style={styles.notesInput}
                     value={result.notes}
-                    onChangeText={(text) => updateItemNotes(item.ref, text)}
+                    onChangeText={(text) => updateItemNotes(item.id, text)}
                     placeholder="Add assessment notes..."
                     multiline
                     numberOfLines={3}
@@ -544,7 +554,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#1e293b",
   },
-  checklistVersion: {
+  checklistCategory: {
     fontSize: 12,
     color: "#64748b",
     marginRight: 12,

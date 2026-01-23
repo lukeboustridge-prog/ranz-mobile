@@ -17,8 +17,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useLocalDB } from "../../src/hooks/useLocalDB";
-import { addToSyncQueue } from "../../src/lib/sqlite";
-import type { LocalReportDraft, LocalTemplate } from "../../src/types/database";
+import type { LocalReport, LocalTemplate } from "../../src/types/database";
 import { InspectionType, PropertyType, ReportStatus } from "../../src/types/shared";
 
 const PROPERTY_TYPES = [
@@ -94,27 +93,33 @@ export default function NewReportScreen() {
       const now = new Date().toISOString();
       const id = `local_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-      const newReport: LocalReportDraft = {
+      const newReport: LocalReport = {
         id,
-        reportId: null,
         reportNumber: null,
+        status: ReportStatus.DRAFT,
         propertyAddress: propertyAddress.trim(),
         propertyCity: propertyCity.trim(),
         propertyRegion: propertyRegion.trim() || "Unknown",
         propertyPostcode: propertyPostcode.trim() || "0000",
         propertyType,
         buildingAge: buildingAge ? parseInt(buildingAge, 10) : null,
-        clientName: clientName.trim(),
-        clientEmail: clientEmail.trim() || null,
-        clientPhone: clientPhone.trim() || null,
+        gpsLat: null,
+        gpsLng: null,
         inspectionDate: now,
         inspectionType,
         weatherConditions: weatherConditions.trim() || null,
         accessMethod: null,
         limitations: null,
-        executiveSummary: null,
-        conclusions: null,
-        status: ReportStatus.DRAFT,
+        clientName: clientName.trim(),
+        clientEmail: clientEmail.trim() || null,
+        clientPhone: clientPhone.trim() || null,
+        scopeOfWorksJson: null,
+        methodologyJson: null,
+        findingsJson: null,
+        conclusionsJson: null,
+        recommendationsJson: null,
+        declarationSigned: false,
+        signedAt: null,
         syncStatus: "draft",
         createdAt: now,
         updatedAt: now,
@@ -124,8 +129,11 @@ export default function NewReportScreen() {
 
       await saveReport(newReport);
 
-      // Add to sync queue
-      await addToSyncQueue("report", id, "create", newReport as unknown as Record<string, unknown>);
+      // Add to sync queue (only on native)
+      if (Platform.OS !== "web") {
+        const sqlite = await import("../../src/lib/sqlite");
+        await sqlite.addToSyncQueue("report", id, "create", newReport as unknown as Record<string, unknown>);
+      }
 
       // Navigate to the report detail
       router.replace(`/(main)/report-detail/${id}`);

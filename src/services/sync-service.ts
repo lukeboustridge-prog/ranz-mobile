@@ -1,9 +1,18 @@
 /**
  * Sync Service
- * Handles offline sync engine for down-sync (server → mobile) and up-sync (mobile → server)
+ * Comprehensive offline sync engine for two-way synchronization
+ * - Down-sync: Server → Mobile (bootstrap, incremental updates)
+ * - Up-sync: Mobile → Server (reports, photos, defects, elements, compliance)
  */
 
-import { fetchBootstrapData, withRetry, checkApiHealth } from "../lib/api";
+import NetInfo from "@react-native-community/netinfo";
+import * as FileSystem from "expo-file-system";
+import {
+  fetchBootstrapData,
+  withRetry,
+  checkApiHealth,
+  apiClient,
+} from "../lib/api";
 import {
   saveUser,
   getUser,
@@ -11,85 +20,752 @@ import {
   getAllChecklists,
   saveTemplate,
   getAllTemplates,
-  saveReportDraft,
-  getAllReportDrafts,
+  saveReport,
+  getReport,
+  getAllReports,
+  getPendingSyncReports,
+  getRoofElementsForReport,
+  getDefectsForReport,
+  getPhotosForReport,
+  getComplianceAssessment,
+  getPendingUploadPhotos,
+  updatePhotoSyncStatus,
   getSyncQueue,
   removeSyncQueueItem,
   updateSyncQueueAttempt,
   getSyncQueueCount,
+  clearSyncQueue,
+  getSyncState as getDbSyncState,
+  updateSyncState as updateDbSyncState,
+  getReportWithRelations,
 } from "../lib/sqlite";
-import { saveLastSyncAt, getLastSyncAt } from "../lib/storage";
-import type { LocalUser, LocalChecklist, LocalTemplate, LocalReportDraft } from "../types/database";
+import { saveLastSyncAt, getLastSyncAt, getOrCreateDeviceId } from "../lib/storage";
+import type {
+  LocalUser,
+  LocalChecklist,
+  LocalTemplate,
+  LocalReport,
+  LocalRoofElement,
+  LocalDefect,
+  LocalPhoto,
+  LocalComplianceAssessment,
+} from "../types/database";
 import type {
   SyncProgress,
   SyncResult,
   SyncError,
-  BootstrapData,
   SyncState,
   NetworkStatus,
 } from "../types/sync";
-import type { Checklist, ReportTemplate, ReportSummary, User } from "../types/shared";
+import type {
+  Checklist,
+  ReportTemplate,
+  ReportSummary,
+  User,
+  SyncUploadPayload,
+  SyncUploadResponse,
+  ReportSync,
+  RoofElementSync,
+  DefectSync,
+  ComplianceAssessmentSync,
+  PhotoMetadataSync,
+} from "../types/shared";
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const MAX_RETRY_ATTEMPTS = 3;
+const SYNC_BATCH_SIZE = 10; // Max reports per sync batch
+const PHOTO_UPLOAD_TIMEOUT = 120000; // 2 minutes for photo upload
+const AUTO_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+// ============================================
+// TYPES
+// ============================================
+
+type ProgressCallback = (status: string, progress: number) => void;
+type ErrorCallback = (error: SyncError) => void;
+type StatusCallback = (state: SyncState) => void;
+
+interface UploadResult {
+  success: boolean;
+  reportsSynced: number;
+  photosSynced: number;
+  errors: SyncError[];
+  conflicts: number;
+}
 
 // ============================================
 // SYNC ENGINE CLASS
 // ============================================
 
-type ProgressCallback = (status: string, progress: number) => void;
-type ErrorCallback = (error: SyncError) => void;
-
 class SyncEngine {
   private progressCallback: ProgressCallback | null = null;
   private errorCallback: ErrorCallback | null = null;
+  private statusCallback: StatusCallback | null = null;
   private isSyncing: boolean = false;
+  private isOnline: boolean = false;
+  private autoSyncTimer: NodeJS.Timeout | null = null;
+  private networkUnsubscribe: (() => void) | null = null;
+
+  constructor() {
+    this.initializeNetworkListener();
+  }
+
+  // ============================================
+  // LIFECYCLE
+  // ============================================
 
   /**
-   * Register progress callback
+   * Initialize network state listener
    */
+  private initializeNetworkListener(): void {
+    this.networkUnsubscribe = NetInfo.addEventListener((state) => {
+      const wasOnline = this.isOnline;
+      this.isOnline = state.isConnected === true && state.isInternetReachable !== false;
+
+      console.log(`[Sync] Network state changed: ${this.isOnline ? "online" : "offline"}`);
+
+      // Trigger sync when coming back online
+      if (!wasOnline && this.isOnline) {
+        console.log("[Sync] Network restored - triggering sync");
+        this.syncPendingChanges().catch(console.error);
+      }
+
+      // Notify status listeners
+      this.notifyStatusChange();
+    });
+  }
+
+  /**
+   * Clean up resources
+   */
+  destroy(): void {
+    this.stopAutoSync();
+    if (this.networkUnsubscribe) {
+      this.networkUnsubscribe();
+      this.networkUnsubscribe = null;
+    }
+  }
+
+  // ============================================
+  // CALLBACKS
+  // ============================================
+
   onProgress(callback: ProgressCallback): void {
     this.progressCallback = callback;
   }
 
-  /**
-   * Register error callback
-   */
   onError(callback: ErrorCallback): void {
     this.errorCallback = callback;
   }
 
-  /**
-   * Emit progress update
-   */
+  onStatusChange(callback: StatusCallback): void {
+    this.statusCallback = callback;
+  }
+
   private emitProgress(status: string, progress: number): void {
+    console.log(`[Sync] ${status} (${progress}%)`);
     if (this.progressCallback) {
       this.progressCallback(status, progress);
     }
   }
 
-  /**
-   * Emit error
-   */
   private emitError(error: SyncError): void {
+    console.error(`[Sync] Error: ${error.code} - ${error.message}`);
     if (this.errorCallback) {
       this.errorCallback(error);
     }
   }
+
+  private async notifyStatusChange(): Promise<void> {
+    if (this.statusCallback) {
+      const state = await this.getSyncState();
+      this.statusCallback(state);
+    }
+  }
+
+  // ============================================
+  // AUTO SYNC
+  // ============================================
+
+  /**
+   * Start automatic background sync
+   */
+  startAutoSync(intervalMs: number = AUTO_SYNC_INTERVAL): void {
+    this.stopAutoSync();
+
+    this.autoSyncTimer = setInterval(async () => {
+      if (this.isOnline && !this.isSyncing) {
+        console.log("[Sync] Auto-sync triggered");
+        await this.syncPendingChanges();
+      }
+    }, intervalMs);
+
+    console.log(`[Sync] Auto-sync started (interval: ${intervalMs}ms)`);
+  }
+
+  /**
+   * Stop automatic background sync
+   */
+  stopAutoSync(): void {
+    if (this.autoSyncTimer) {
+      clearInterval(this.autoSyncTimer);
+      this.autoSyncTimer = null;
+      console.log("[Sync] Auto-sync stopped");
+    }
+  }
+
+  // ============================================
+  // FULL SYNC
+  // ============================================
+
+  /**
+   * Perform full bidirectional sync
+   */
+  async fullSync(): Promise<SyncResult> {
+    if (this.isSyncing) {
+      return this.createErrorResult("SYNC_IN_PROGRESS", "Sync already in progress");
+    }
+
+    this.isSyncing = true;
+    const startTime = Date.now();
+    const errors: SyncError[] = [];
+    let downloaded = { checklists: 0, templates: 0, reports: 0 };
+    let uploaded = { reports: 0, photos: 0, defects: 0, elements: 0 };
+
+    try {
+      this.emitProgress("Checking connection...", 5);
+
+      // Check network status
+      const isOnline = await checkApiHealth();
+      if (!isOnline) {
+        this.emitProgress("Offline - sync skipped", 100);
+        return {
+          success: true,
+          downloaded,
+          uploaded,
+          errors: [],
+          duration: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // Step 1: Upload local changes first (upload before download)
+      this.emitProgress("Uploading local changes...", 10);
+      const uploadResult = await this.uploadPendingChanges();
+      uploaded = {
+        reports: uploadResult.reportsSynced,
+        photos: uploadResult.photosSynced,
+        defects: 0, // Counted with reports
+        elements: 0, // Counted with reports
+      };
+      errors.push(...uploadResult.errors);
+
+      // Step 2: Download from server
+      this.emitProgress("Downloading from server...", 50);
+      const downloadResult = await this.downloadFromServer();
+      downloaded = downloadResult.downloaded;
+      errors.push(...downloadResult.errors);
+
+      // Update last sync timestamp
+      await updateDbSyncState({ lastUploadAt: new Date().toISOString() });
+      await this.notifyStatusChange();
+
+      this.emitProgress("Sync complete!", 100);
+
+      return {
+        success: errors.filter((e) => !e.retryable).length === 0,
+        downloaded,
+        uploaded,
+        errors,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      const syncError: SyncError = {
+        code: "FULL_SYNC_FAILED",
+        message: error instanceof Error ? error.message : "Full sync failed",
+        retryable: true,
+      };
+      errors.push(syncError);
+      this.emitError(syncError);
+
+      return {
+        success: false,
+        downloaded,
+        uploaded,
+        errors,
+        duration: Date.now() - startTime,
+        timestamp: new Date().toISOString(),
+      };
+    } finally {
+      this.isSyncing = false;
+      await this.notifyStatusChange();
+    }
+  }
+
+  // ============================================
+  // UPLOAD SYNC (Mobile → Server)
+  // ============================================
+
+  /**
+   * Sync pending local changes to server
+   */
+  async syncPendingChanges(): Promise<UploadResult> {
+    if (this.isSyncing) {
+      return { success: false, reportsSynced: 0, photosSynced: 0, errors: [], conflicts: 0 };
+    }
+
+    this.isSyncing = true;
+    const errors: SyncError[] = [];
+    let reportsSynced = 0;
+    let photosSynced = 0;
+    let conflicts = 0;
+
+    try {
+      // Check if online
+      if (!this.isOnline) {
+        const netState = await NetInfo.fetch();
+        this.isOnline = netState.isConnected === true;
+      }
+
+      if (!this.isOnline) {
+        console.log("[Sync] Offline - skipping upload");
+        return { success: true, reportsSynced: 0, photosSynced: 0, errors: [], conflicts: 0 };
+      }
+
+      const result = await this.uploadPendingChanges();
+      return result;
+    } catch (error) {
+      errors.push({
+        code: "UPLOAD_FAILED",
+        message: error instanceof Error ? error.message : "Upload failed",
+        retryable: true,
+      });
+      return { success: false, reportsSynced, photosSynced, errors, conflicts };
+    } finally {
+      this.isSyncing = false;
+      await this.notifyStatusChange();
+    }
+  }
+
+  /**
+   * Upload all pending changes to server
+   */
+  private async uploadPendingChanges(): Promise<UploadResult> {
+    const errors: SyncError[] = [];
+    let reportsSynced = 0;
+    let photosSynced = 0;
+    let conflicts = 0;
+
+    try {
+      // Get pending reports
+      const pendingReports = await getPendingSyncReports();
+
+      if (pendingReports.length === 0) {
+        console.log("[Sync] No pending reports to upload");
+        return { success: true, reportsSynced: 0, photosSynced: 0, errors: [], conflicts: 0 };
+      }
+
+      console.log(`[Sync] Found ${pendingReports.length} pending reports`);
+
+      // Build sync payload
+      const deviceId = await getOrCreateDeviceId();
+      const reportsToSync: ReportSync[] = [];
+
+      for (const report of pendingReports.slice(0, SYNC_BATCH_SIZE)) {
+        try {
+          const reportSync = await this.buildReportSyncPayload(report);
+          if (reportSync) {
+            reportsToSync.push(reportSync);
+          }
+        } catch (error) {
+          console.error(`[Sync] Failed to build payload for report ${report.id}:`, error);
+          errors.push({
+            code: "PAYLOAD_BUILD_FAILED",
+            message: error instanceof Error ? error.message : "Failed to build payload",
+            entityType: "report",
+            entityId: report.id,
+            retryable: true,
+          });
+        }
+      }
+
+      if (reportsToSync.length === 0) {
+        return { success: true, reportsSynced: 0, photosSynced: 0, errors, conflicts: 0 };
+      }
+
+      // Build upload payload
+      const payload: SyncUploadPayload = {
+        reports: reportsToSync,
+        deviceId,
+        syncTimestamp: new Date().toISOString(),
+      };
+
+      this.emitProgress(`Uploading ${reportsToSync.length} reports...`, 30);
+
+      // Send to server
+      const response = await this.sendUploadPayload(payload);
+
+      if (!response.success) {
+        errors.push({
+          code: "UPLOAD_REQUEST_FAILED",
+          message: "Server rejected upload",
+          retryable: true,
+        });
+        return { success: false, reportsSynced: 0, photosSynced: 0, errors, conflicts: 0 };
+      }
+
+      // Process results
+      reportsSynced = response.results.syncedReports.length;
+      conflicts = response.stats.conflicts;
+
+      // Update local sync status for successful reports
+      for (const reportId of response.results.syncedReports) {
+        await this.markReportSynced(reportId);
+      }
+
+      // Handle failed reports
+      for (const failed of response.results.failedReports) {
+        errors.push({
+          code: "REPORT_SYNC_FAILED",
+          message: failed.error,
+          entityType: "report",
+          entityId: failed.reportId,
+          retryable: true,
+        });
+        await this.markReportSyncError(failed.reportId, failed.error);
+      }
+
+      // Upload photos that need binary upload
+      if (response.results.pendingPhotoUploads.length > 0) {
+        this.emitProgress(`Uploading ${response.results.pendingPhotoUploads.length} photos...`, 60);
+
+        for (const photoUpload of response.results.pendingPhotoUploads) {
+          try {
+            const uploaded = await this.uploadPhotoToPresignedUrl(
+              photoUpload.photoId,
+              photoUpload.uploadUrl
+            );
+            if (uploaded) {
+              photosSynced++;
+            }
+          } catch (error) {
+            console.error(`[Sync] Failed to upload photo ${photoUpload.photoId}:`, error);
+            errors.push({
+              code: "PHOTO_UPLOAD_FAILED",
+              message: error instanceof Error ? error.message : "Photo upload failed",
+              entityType: "photo",
+              entityId: photoUpload.photoId,
+              retryable: true,
+            });
+          }
+        }
+      }
+
+      // Log conflicts
+      for (const conflict of response.results.conflicts) {
+        console.log(
+          `[Sync] Conflict resolved for report ${conflict.reportId}: ` +
+            `${conflict.resolution} (server: ${conflict.serverUpdatedAt}, client: ${conflict.clientUpdatedAt})`
+        );
+      }
+
+      this.emitProgress("Upload complete", 90);
+
+      return {
+        success: errors.length === 0,
+        reportsSynced,
+        photosSynced,
+        errors,
+        conflicts,
+      };
+    } catch (error) {
+      console.error("[Sync] Upload failed:", error);
+      errors.push({
+        code: "UPLOAD_FAILED",
+        message: error instanceof Error ? error.message : "Upload failed",
+        retryable: true,
+      });
+      return { success: false, reportsSynced, photosSynced, errors, conflicts };
+    }
+  }
+
+  /**
+   * Build sync payload for a single report with all nested data
+   */
+  private async buildReportSyncPayload(report: LocalReport): Promise<ReportSync | null> {
+    // Get all related data
+    const [elements, defects, photos, compliance] = await Promise.all([
+      getRoofElementsForReport(report.id),
+      getDefectsForReport(report.id),
+      getPhotosForReport(report.id),
+      getComplianceAssessment(report.id),
+    ]);
+
+    // Build element sync objects
+    const elementSyncs: RoofElementSync[] = elements.map((e) => ({
+      id: e.id,
+      elementType: e.elementType,
+      location: e.location,
+      claddingType: e.claddingType,
+      material: e.material,
+      manufacturer: e.manufacturer,
+      pitch: e.pitch,
+      area: e.area,
+      conditionRating: e.conditionRating,
+      conditionNotes: e.conditionNotes,
+      clientUpdatedAt: e.updatedAt,
+    }));
+
+    // Build defect sync objects
+    const defectSyncs: DefectSync[] = defects.map((d) => ({
+      id: d.id,
+      defectNumber: d.defectNumber,
+      title: d.title,
+      description: d.description,
+      location: d.location,
+      classification: d.classification,
+      severity: d.severity,
+      observation: d.observation,
+      analysis: d.analysis,
+      opinion: d.opinion,
+      codeReference: d.codeReference,
+      copReference: d.copReference,
+      recommendation: d.recommendation,
+      priorityLevel: d.priorityLevel,
+      roofElementId: d.roofElementId,
+      clientUpdatedAt: d.updatedAt,
+    }));
+
+    // Build photo metadata sync objects
+    const photoSyncs: PhotoMetadataSync[] = photos.map((p) => ({
+      id: p.id,
+      photoType: p.photoType,
+      filename: p.filename,
+      originalFilename: p.originalFilename,
+      mimeType: p.mimeType,
+      fileSize: p.fileSize,
+      capturedAt: p.capturedAt,
+      gpsLat: p.gpsLat,
+      gpsLng: p.gpsLng,
+      cameraMake: p.cameraMake,
+      cameraModel: p.cameraModel,
+      originalHash: p.originalHash,
+      caption: p.caption,
+      sortOrder: p.sortOrder,
+      defectId: p.defectId,
+      roofElementId: p.roofElementId,
+      needsUpload: p.syncStatus === "captured" || p.syncStatus === "processing",
+      clientUpdatedAt: p.createdAt,
+    }));
+
+    // Build compliance sync object
+    let complianceSync: ComplianceAssessmentSync | null = null;
+    if (compliance) {
+      const checklistResults = JSON.parse(compliance.checklistResultsJson);
+      complianceSync = {
+        id: compliance.id,
+        checklistResults,
+        nonComplianceSummary: compliance.nonComplianceSummary,
+        clientUpdatedAt: compliance.updatedAt,
+      };
+    }
+
+    // Parse JSON fields
+    const scopeOfWorks = report.scopeOfWorksJson ? JSON.parse(report.scopeOfWorksJson) : null;
+    const methodology = report.methodologyJson ? JSON.parse(report.methodologyJson) : null;
+    const findings = report.findingsJson ? JSON.parse(report.findingsJson) : null;
+    const conclusions = report.conclusionsJson ? JSON.parse(report.conclusionsJson) : null;
+    const recommendations = report.recommendationsJson ? JSON.parse(report.recommendationsJson) : null;
+
+    // Build report sync object
+    const reportSync: ReportSync = {
+      id: report.id,
+      reportNumber: report.reportNumber || `RANZ-${new Date().getFullYear()}-00000`, // Server will assign if new
+      status: report.status,
+      propertyAddress: report.propertyAddress,
+      propertyCity: report.propertyCity,
+      propertyRegion: report.propertyRegion,
+      propertyPostcode: report.propertyPostcode,
+      propertyType: report.propertyType,
+      buildingAge: report.buildingAge,
+      gpsLat: report.gpsLat,
+      gpsLng: report.gpsLng,
+      inspectionDate: report.inspectionDate,
+      inspectionType: report.inspectionType,
+      weatherConditions: report.weatherConditions,
+      accessMethod: report.accessMethod,
+      limitations: report.limitations,
+      clientName: report.clientName,
+      clientEmail: report.clientEmail,
+      clientPhone: report.clientPhone,
+      scopeOfWorks,
+      methodology,
+      findings,
+      conclusions,
+      recommendations,
+      declarationSigned: report.declarationSigned,
+      signedAt: report.signedAt,
+      clientUpdatedAt: report.updatedAt,
+      elements: elementSyncs,
+      defects: defectSyncs,
+      compliance: complianceSync,
+      photoMetadata: photoSyncs,
+    };
+
+    return reportSync;
+  }
+
+  /**
+   * Send upload payload to server
+   */
+  private async sendUploadPayload(payload: SyncUploadPayload): Promise<SyncUploadResponse> {
+    try {
+      const response = await withRetry(
+        async () => {
+          const result = await apiClient.post<SyncUploadResponse>("/api/sync/upload", payload);
+          return result.data;
+        },
+        MAX_RETRY_ATTEMPTS,
+        1000
+      );
+
+      return response;
+    } catch (error) {
+      console.error("[Sync] Failed to send upload payload:", error);
+      return {
+        success: false,
+        timestamp: new Date().toISOString(),
+        processingTimeMs: 0,
+        stats: { total: 0, succeeded: 0, failed: payload.reports.length, conflicts: 0 },
+        results: {
+          syncedReports: [],
+          failedReports: payload.reports.map((r) => ({
+            reportId: r.id,
+            error: error instanceof Error ? error.message : "Upload failed",
+          })),
+          conflicts: [],
+          pendingPhotoUploads: [],
+        },
+      };
+    }
+  }
+
+  /**
+   * Upload photo binary to presigned URL
+   */
+  private async uploadPhotoToPresignedUrl(photoId: string, uploadUrl: string): Promise<boolean> {
+    try {
+      // Get photo from local database
+      const photos = await getPendingUploadPhotos();
+      const photo = photos.find((p) => p.id === photoId);
+
+      if (!photo) {
+        console.warn(`[Sync] Photo ${photoId} not found in pending uploads`);
+        return false;
+      }
+
+      // Check if file exists
+      const fileInfo = await FileSystem.getInfoAsync(photo.localUri);
+      if (!fileInfo.exists) {
+        console.error(`[Sync] Photo file not found: ${photo.localUri}`);
+        await updatePhotoSyncStatus(photoId, "error", undefined, "File not found");
+        return false;
+      }
+
+      await updatePhotoSyncStatus(photoId, "processing");
+
+      // Upload to presigned URL
+      const uploadResult = await FileSystem.uploadAsync(uploadUrl, photo.localUri, {
+        httpMethod: "PUT",
+        headers: {
+          "Content-Type": photo.mimeType,
+        },
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      });
+
+      if (uploadResult.status >= 200 && uploadResult.status < 300) {
+        // Extract the public URL (remove query params from presigned URL)
+        const publicUrl = uploadUrl.split("?")[0];
+        await updatePhotoSyncStatus(photoId, "synced", publicUrl);
+        console.log(`[Sync] Photo ${photoId} uploaded successfully`);
+        return true;
+      } else {
+        console.error(`[Sync] Photo upload failed with status ${uploadResult.status}`);
+        await updatePhotoSyncStatus(photoId, "error", undefined, `Upload failed: ${uploadResult.status}`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`[Sync] Photo upload error for ${photoId}:`, error);
+      await updatePhotoSyncStatus(
+        photoId,
+        "error",
+        undefined,
+        error instanceof Error ? error.message : "Upload error"
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Mark report as synced in local database
+   */
+  private async markReportSynced(reportId: string): Promise<void> {
+    const report = await getReport(reportId);
+    if (report) {
+      await saveReport({
+        ...report,
+        syncStatus: "synced",
+        syncedAt: new Date().toISOString(),
+        lastSyncError: null,
+      });
+    }
+  }
+
+  /**
+   * Mark report sync error in local database
+   */
+  private async markReportSyncError(reportId: string, error: string): Promise<void> {
+    const report = await getReport(reportId);
+    if (report) {
+      await saveReport({
+        ...report,
+        syncStatus: "error",
+        lastSyncError: error,
+      });
+    }
+  }
+
+  // ============================================
+  // DOWNLOAD SYNC (Server → Mobile)
+  // ============================================
 
   /**
    * Bootstrap - Full initial sync from server
    */
   async bootstrap(): Promise<SyncResult> {
     if (this.isSyncing) {
-      return {
-        success: false,
-        downloaded: { checklists: 0, templates: 0, reports: 0 },
-        uploaded: { reports: 0, photos: 0, defects: 0, elements: 0 },
-        errors: [{ code: "SYNC_IN_PROGRESS", message: "Sync already in progress", retryable: false }],
-        duration: 0,
-        timestamp: new Date().toISOString(),
-      };
+      return this.createErrorResult("SYNC_IN_PROGRESS", "Sync already in progress");
     }
 
     this.isSyncing = true;
+    const startTime = Date.now();
+
+    try {
+      return await this.downloadFromServer();
+    } finally {
+      this.isSyncing = false;
+      await this.notifyStatusChange();
+    }
+  }
+
+  /**
+   * Download data from server
+   */
+  private async downloadFromServer(): Promise<SyncResult> {
     const startTime = Date.now();
     const errors: SyncError[] = [];
     let downloadedChecklists = 0;
@@ -99,7 +775,6 @@ class SyncEngine {
     try {
       this.emitProgress("Checking connection...", 5);
 
-      // Check API health
       const isOnline = await checkApiHealth();
       if (!isOnline) {
         this.emitProgress("Offline - using cached data", 100);
@@ -115,13 +790,11 @@ class SyncEngine {
 
       this.emitProgress("Fetching data from server...", 10);
 
-      // Get last sync timestamp for incremental sync
       const lastSyncAt = await getLastSyncAt();
 
-      // Fetch bootstrap data with retry
       const response = await withRetry(
         () => fetchBootstrapData(lastSyncAt || undefined),
-        3,
+        MAX_RETRY_ATTEMPTS,
         1000
       );
 
@@ -143,7 +816,7 @@ class SyncEngine {
         });
       }
 
-      // Download and save checklists
+      // Download checklists
       this.emitProgress("Downloading checklists...", 35);
       try {
         downloadedChecklists = await this.downloadChecklists(data.checklists);
@@ -153,14 +826,9 @@ class SyncEngine {
           message: error instanceof Error ? error.message : "Failed to download checklists",
           retryable: true,
         });
-        this.emitError({
-          code: "CHECKLIST_DOWNLOAD_FAILED",
-          message: "Failed to download checklists",
-          retryable: true,
-        });
       }
 
-      // Download and save templates
+      // Download templates
       this.emitProgress("Downloading templates...", 55);
       try {
         downloadedTemplates = await this.downloadTemplates(data.templates);
@@ -184,11 +852,12 @@ class SyncEngine {
         });
       }
 
-      // Save last sync timestamp
+      // Save sync timestamp
       this.emitProgress("Finalizing sync...", 95);
       await saveLastSyncAt(data.lastSyncAt);
+      await updateDbSyncState({ lastBootstrapAt: new Date().toISOString() });
 
-      this.emitProgress("Sync complete!", 100);
+      this.emitProgress("Download complete!", 100);
 
       return {
         success: errors.length === 0,
@@ -204,8 +873,8 @@ class SyncEngine {
       };
     } catch (error) {
       const syncError: SyncError = {
-        code: "BOOTSTRAP_FAILED",
-        message: error instanceof Error ? error.message : "Bootstrap failed",
+        code: "DOWNLOAD_FAILED",
+        message: error instanceof Error ? error.message : "Download failed",
         retryable: true,
       };
       errors.push(syncError);
@@ -223,37 +892,31 @@ class SyncEngine {
         duration: Date.now() - startTime,
         timestamp: new Date().toISOString(),
       };
-    } finally {
-      this.isSyncing = false;
     }
   }
 
-  /**
-   * Save user data to local database
-   */
   private async saveUserData(user: User): Promise<void> {
     const localUser: LocalUser = {
       id: user.id,
       clerkId: user.clerkId,
       email: user.email,
       name: user.name,
+      phone: user.phone ?? null,
       role: user.role,
-      qualifications: user.qualifications,
-      lbpNumber: user.lbpNumber,
+      company: user.company ?? null,
+      qualifications: user.qualifications ?? null,
+      lbpNumber: user.lbpNumber ?? null,
+      yearsExperience: user.yearsExperience ?? null,
       syncedAt: new Date().toISOString(),
     };
     await saveUser(localUser);
   }
 
-  /**
-   * Download and save checklists
-   */
   async downloadChecklists(checklists: Checklist[]): Promise<number> {
     let count = 0;
 
     for (const checklist of checklists) {
       try {
-        // Validate checklist structure
         if (!checklist.id || !checklist.name) {
           console.warn(`[Sync] Invalid checklist structure: ${checklist.id}`);
           continue;
@@ -262,11 +925,11 @@ class SyncEngine {
         const localChecklist: LocalChecklist = {
           id: checklist.id,
           name: checklist.name,
-          version: checklist.version || "1.0",
           category: checklist.category,
-          standard: checklist.standard,
-          definition: JSON.stringify(checklist),
+          standard: checklist.standard ?? null,
+          itemsJson: JSON.stringify(checklist.items || []),
           downloadedAt: new Date().toISOString(),
+          updatedAt: checklist.updatedAt || new Date().toISOString(),
         };
 
         await saveChecklist(localChecklist);
@@ -280,9 +943,6 @@ class SyncEngine {
     return count;
   }
 
-  /**
-   * Download and save templates
-   */
   async downloadTemplates(templates: ReportTemplate[]): Promise<number> {
     let count = 0;
 
@@ -315,53 +975,54 @@ class SyncEngine {
     return count;
   }
 
-  /**
-   * Download recent reports (summaries only)
-   */
   async downloadRecentReports(reports: ReportSummary[]): Promise<number> {
     let count = 0;
 
     for (const report of reports) {
       try {
-        // Check if we already have this report locally
-        const existingDrafts = await getAllReportDrafts();
-        const existingDraft = existingDrafts.find(
-          (d) => d.reportId === report.id || d.reportNumber === report.reportNumber
+        const existingReports = await getAllReports();
+        const existingReport = existingReports.find(
+          (r) => r.id === report.id || r.reportNumber === report.reportNumber
         );
 
-        if (existingDraft) {
-          // Conflict detection: if local is newer and has changes, skip
+        if (existingReport) {
+          // Skip if local has unsynced changes
           if (
-            existingDraft.syncStatus !== "synced" &&
-            new Date(existingDraft.updatedAt) > new Date(report.updatedAt)
+            existingReport.syncStatus !== "synced" &&
+            new Date(existingReport.updatedAt) > new Date(report.updatedAt)
           ) {
             console.log(`[Sync] Skipping report ${report.id} - local changes are newer`);
             continue;
           }
         }
 
-        // Create minimal draft entry from summary
-        const localDraft: LocalReportDraft = {
-          id: existingDraft?.id || `local_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          reportId: report.id,
+        const localReport: LocalReport = {
+          id: existingReport?.id || report.id,
           reportNumber: report.reportNumber,
+          status: report.status,
           propertyAddress: report.propertyAddress,
           propertyCity: report.propertyCity,
-          propertyRegion: "",
-          propertyPostcode: "",
-          propertyType: "RESIDENTIAL_1" as LocalReportDraft["propertyType"],
-          buildingAge: null,
-          clientName: "",
-          clientEmail: null,
-          clientPhone: null,
+          propertyRegion: existingReport?.propertyRegion || "",
+          propertyPostcode: existingReport?.propertyPostcode || "",
+          propertyType: existingReport?.propertyType || ("RESIDENTIAL_1" as LocalReport["propertyType"]),
+          buildingAge: existingReport?.buildingAge || null,
+          gpsLat: existingReport?.gpsLat || null,
+          gpsLng: existingReport?.gpsLng || null,
           inspectionDate: report.createdAt,
           inspectionType: report.inspectionType,
-          weatherConditions: null,
-          accessMethod: null,
-          limitations: null,
-          executiveSummary: null,
-          conclusions: null,
-          status: report.status,
+          weatherConditions: existingReport?.weatherConditions || null,
+          accessMethod: existingReport?.accessMethod || null,
+          limitations: existingReport?.limitations || null,
+          clientName: existingReport?.clientName || "",
+          clientEmail: existingReport?.clientEmail || null,
+          clientPhone: existingReport?.clientPhone || null,
+          scopeOfWorksJson: existingReport?.scopeOfWorksJson || null,
+          methodologyJson: existingReport?.methodologyJson || null,
+          findingsJson: existingReport?.findingsJson || null,
+          conclusionsJson: existingReport?.conclusionsJson || null,
+          recommendationsJson: existingReport?.recommendationsJson || null,
+          declarationSigned: existingReport?.declarationSigned || false,
+          signedAt: existingReport?.signedAt || null,
           syncStatus: "synced",
           createdAt: report.createdAt,
           updatedAt: report.updatedAt,
@@ -369,7 +1030,7 @@ class SyncEngine {
           lastSyncError: null,
         };
 
-        await saveReportDraft(localDraft);
+        await saveReport(localReport);
         count++;
       } catch (error) {
         console.error(`[Sync] Failed to save report ${report.id}:`, error);
@@ -380,9 +1041,29 @@ class SyncEngine {
     return count;
   }
 
-  /**
-   * Get locally cached checklist by standard
-   */
+  // ============================================
+  // STATE & UTILITIES
+  // ============================================
+
+  async getSyncState(): Promise<SyncState> {
+    const [pendingSync, lastSyncAt, isOnline] = await Promise.all([
+      getSyncQueueCount(),
+      getLastSyncAt(),
+      checkApiHealth().catch(() => false),
+    ]);
+
+    const pendingReports = await getPendingSyncReports();
+
+    return {
+      isOnline,
+      isSyncing: this.isSyncing,
+      lastSyncAt,
+      pendingUploads: pendingReports.length,
+      pendingDownloads: 0,
+      lastError: null,
+    };
+  }
+
   async getLocalChecklist(standard: string): Promise<Checklist | null> {
     const checklists = await getAllChecklists();
     const local = checklists.find((c) => c.standard === standard);
@@ -390,27 +1071,21 @@ class SyncEngine {
     if (!local) return null;
 
     try {
-      // Parse the full checklist definition
-      const parsed = JSON.parse(local.definition);
+      const items = JSON.parse(local.itemsJson);
       return {
         id: local.id,
         name: local.name,
-        version: local.version,
         category: local.category,
         standard: local.standard,
-        sections: parsed.sections || [],
-        items: parsed.items || [],
+        items: items || [],
         createdAt: local.downloadedAt,
-        updatedAt: local.downloadedAt,
+        updatedAt: local.updatedAt,
       };
     } catch {
       return null;
     }
   }
 
-  /**
-   * Get locally cached template by inspection type
-   */
   async getLocalTemplate(inspectionType: string): Promise<ReportTemplate | null> {
     const templates = await getAllTemplates();
     const local = templates.find((t) => t.inspectionType === inspectionType);
@@ -431,68 +1106,62 @@ class SyncEngine {
     };
   }
 
-  /**
-   * Get current sync state
-   */
-  async getSyncState(): Promise<SyncState> {
-    const [pendingSync, lastSyncAt, isOnline] = await Promise.all([
-      getSyncQueueCount(),
-      getLastSyncAt(),
-      checkApiHealth(),
-    ]);
-
+  private createErrorResult(code: string, message: string): SyncResult {
     return {
-      isOnline,
-      isSyncing: this.isSyncing,
-      lastSyncAt,
-      pendingUploads: pendingSync,
-      pendingDownloads: 0,
-      lastError: null,
+      success: false,
+      downloaded: { checklists: 0, templates: 0, reports: 0 },
+      uploaded: { reports: 0, photos: 0, defects: 0, elements: 0 },
+      errors: [{ code, message, retryable: false }],
+      duration: 0,
+      timestamp: new Date().toISOString(),
     };
   }
 
   /**
-   * Process upload queue
+   * Force retry all failed syncs
    */
-  async processUploadQueue(): Promise<{ uploaded: number; failed: number }> {
-    const queue = await getSyncQueue();
-    let uploaded = 0;
-    let failed = 0;
-
-    for (const item of queue) {
-      if (item.attemptCount >= 3) {
-        console.log(`[Sync] Skipping item ${item.id} - max attempts reached`);
-        failed++;
-        continue;
-      }
-
-      try {
-        // Process based on entity type
-        // TODO: Implement actual upload logic for each entity type
-        console.log(`[Sync] Would upload ${item.entityType} ${item.entityId}`);
-
-        // Remove from queue on success
-        await removeSyncQueueItem(item.id);
-        uploaded++;
-      } catch (error) {
-        await updateSyncQueueAttempt(
-          item.id,
-          error instanceof Error ? error.message : "Unknown error"
-        );
-        failed++;
+  async retryFailedSyncs(): Promise<SyncResult> {
+    // Reset error status on failed reports
+    const allReports = await getAllReports();
+    for (const report of allReports) {
+      if (report.syncStatus === "error") {
+        await saveReport({
+          ...report,
+          syncStatus: "pending",
+          lastSyncError: null,
+        });
       }
     }
 
-    return { uploaded, failed };
+    // Reset failed photo syncs
+    const pendingPhotos = await getPendingUploadPhotos();
+    for (const photo of pendingPhotos) {
+      if (photo.syncStatus === "error") {
+        await updatePhotoSyncStatus(photo.id, "captured");
+      }
+    }
+
+    // Run full sync
+    return this.fullSync();
   }
 }
 
-// Export singleton instance
+// ============================================
+// SINGLETON & EXPORTS
+// ============================================
+
 export const syncEngine = new SyncEngine();
 
-// Export convenience functions
 export async function initializeSyncEngine(): Promise<SyncResult> {
   return syncEngine.bootstrap();
+}
+
+export async function fullSync(): Promise<SyncResult> {
+  return syncEngine.fullSync();
+}
+
+export async function syncPendingChanges(): Promise<UploadResult> {
+  return syncEngine.syncPendingChanges();
 }
 
 export async function getSyncState(): Promise<SyncState> {
@@ -505,4 +1174,28 @@ export async function getLocalChecklist(standard: string): Promise<Checklist | n
 
 export async function getLocalTemplate(inspectionType: string): Promise<ReportTemplate | null> {
   return syncEngine.getLocalTemplate(inspectionType);
+}
+
+export function startAutoSync(intervalMs?: number): void {
+  syncEngine.startAutoSync(intervalMs);
+}
+
+export function stopAutoSync(): void {
+  syncEngine.stopAutoSync();
+}
+
+export async function retryFailedSyncs(): Promise<SyncResult> {
+  return syncEngine.retryFailedSyncs();
+}
+
+export function onSyncProgress(callback: ProgressCallback): void {
+  syncEngine.onProgress(callback);
+}
+
+export function onSyncError(callback: ErrorCallback): void {
+  syncEngine.onError(callback);
+}
+
+export function onSyncStatusChange(callback: StatusCallback): void {
+  syncEngine.onStatusChange(callback);
 }
