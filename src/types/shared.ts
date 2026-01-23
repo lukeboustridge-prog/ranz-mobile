@@ -79,7 +79,7 @@ export enum ReportStatus {
   FINALISED = "FINALISED",
 }
 
-export type ComplianceStatus = "pass" | "fail" | "partial" | "na";
+export type ComplianceStatus = "COMPLIANT" | "NON_COMPLIANT" | "PARTIAL" | "NOT_ASSESSED" | "NOT_APPLICABLE";
 
 // ============================================
 // INTERFACES
@@ -248,19 +248,25 @@ export interface ComplianceAssessment {
 }
 
 export interface ChecklistItem {
-  id: string;
-  section: string;
+  ref: string;
   item: string;
   description: string;
-  required: boolean;
+  required?: boolean;
+}
+
+export interface ChecklistSection {
+  title: string;
+  items: ChecklistItem[];
 }
 
 export interface Checklist {
   id: string;
   name: string;
+  version?: string;
   category: string;
   standard: string;
-  items: ChecklistItem[];
+  sections?: ChecklistSection[];
+  items?: ChecklistItem[];
   createdAt: string;
   updatedAt: string;
 }

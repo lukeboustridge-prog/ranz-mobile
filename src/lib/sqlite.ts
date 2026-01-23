@@ -13,6 +13,7 @@ import {
   type LocalDefect,
   type LocalRoofElement,
   type LocalComplianceAssessment,
+  type LocalComplianceResult,
   type LocalChecklist,
   type LocalTemplate,
   type LocalSyncQueue,
@@ -104,9 +105,9 @@ export async function getUser(): Promise<LocalUser | null> {
 export async function saveChecklist(checklist: LocalChecklist): Promise<void> {
   const database = getDatabase();
   await database.runAsync(
-    `INSERT OR REPLACE INTO checklists (id, name, category, standard, items_json, downloaded_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [checklist.id, checklist.name, checklist.category, checklist.standard, checklist.itemsJson, checklist.downloadedAt]
+    `INSERT OR REPLACE INTO checklists (id, name, version, category, standard, definition, downloaded_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [checklist.id, checklist.name, checklist.version, checklist.category, checklist.standard, checklist.definition, checklist.downloadedAt]
   );
 }
 
@@ -115,18 +116,20 @@ export async function getAllChecklists(): Promise<LocalChecklist[]> {
   const results = await database.getAllAsync<{
     id: string;
     name: string;
+    version: string;
     category: string;
     standard: string;
-    items_json: string;
+    definition: string;
     downloaded_at: string;
   }>("SELECT * FROM checklists");
 
   return results.map((row) => ({
     id: row.id,
     name: row.name,
+    version: row.version || "1.0",
     category: row.category,
     standard: row.standard,
-    itemsJson: row.items_json,
+    definition: row.definition,
     downloadedAt: row.downloaded_at,
   }));
 }
@@ -136,9 +139,10 @@ export async function getChecklistByStandard(standard: string): Promise<LocalChe
   const result = await database.getFirstAsync<{
     id: string;
     name: string;
+    version: string;
     category: string;
     standard: string;
-    items_json: string;
+    definition: string;
     downloaded_at: string;
   }>("SELECT * FROM checklists WHERE standard = ?", [standard]);
 
@@ -147,9 +151,10 @@ export async function getChecklistByStandard(standard: string): Promise<LocalChe
   return {
     id: result.id,
     name: result.name,
+    version: result.version || "1.0",
     category: result.category,
     standard: result.standard,
-    itemsJson: result.items_json,
+    definition: result.definition,
     downloadedAt: result.downloaded_at,
   };
 }
@@ -405,6 +410,77 @@ function mapPhotoRow(row: Record<string, unknown>): LocalPhoto {
     lastSyncError: row.last_sync_error as string | null,
     createdAt: row.created_at as string,
   };
+}
+
+export async function deletePhoto(id: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync("DELETE FROM photos WHERE id = ?", [id]);
+}
+
+// ============================================
+// COMPLIANCE RESULTS OPERATIONS
+// ============================================
+
+export async function saveComplianceResult(result: LocalComplianceResult): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `INSERT OR REPLACE INTO compliance_results (
+      id, report_id, checklist_id, item_ref, item_description, status,
+      notes, evidence_photo_ids, assessed_at, sync_status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      result.id,
+      result.reportId,
+      result.checklistId,
+      result.itemRef,
+      result.itemDescription,
+      result.status,
+      result.notes,
+      result.evidencePhotoIds,
+      result.assessedAt,
+      result.syncStatus,
+      result.createdAt,
+      result.updatedAt,
+    ]
+  );
+}
+
+export async function getComplianceResultsForReport(reportId: string): Promise<LocalComplianceResult[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<{
+    id: string;
+    report_id: string;
+    checklist_id: string;
+    item_ref: string;
+    item_description: string;
+    status: string;
+    notes: string | null;
+    evidence_photo_ids: string | null;
+    assessed_at: string;
+    sync_status: string;
+    created_at: string;
+    updated_at: string;
+  }>("SELECT * FROM compliance_results WHERE report_id = ? ORDER BY item_ref", [reportId]);
+
+  return results.map((row) => ({
+    id: row.id,
+    reportId: row.report_id,
+    checklistId: row.checklist_id,
+    itemRef: row.item_ref,
+    itemDescription: row.item_description,
+    status: row.status as LocalComplianceResult["status"],
+    notes: row.notes,
+    evidencePhotoIds: row.evidence_photo_ids,
+    assessedAt: row.assessed_at,
+    syncStatus: row.sync_status as LocalComplianceResult["syncStatus"],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export async function deleteComplianceResult(id: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync("DELETE FROM compliance_results WHERE id = ?", [id]);
 }
 
 // ============================================

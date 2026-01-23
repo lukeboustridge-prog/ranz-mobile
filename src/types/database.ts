@@ -186,10 +186,26 @@ export interface LocalComplianceAssessment {
 export interface LocalChecklist {
   id: string;
   name: string;
+  version: string;
   category: string;
   standard: string;
-  itemsJson: string; // JSON string of ChecklistItem[]
+  definition: string; // JSON string of checklist definition
   downloadedAt: string;
+}
+
+export interface LocalComplianceResult {
+  id: string;
+  reportId: string;
+  checklistId: string;
+  itemRef: string;
+  itemDescription: string;
+  status: ComplianceStatus;
+  notes: string | null;
+  evidencePhotoIds: string | null; // JSON array of photo IDs
+  assessedAt: string;
+  syncStatus: SyncStatus;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LocalTemplate {
@@ -362,10 +378,29 @@ CREATE TABLE IF NOT EXISTS compliance_assessments (
 CREATE TABLE IF NOT EXISTS checklists (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  version TEXT NOT NULL DEFAULT '1.0',
   category TEXT NOT NULL,
   standard TEXT NOT NULL,
-  items_json TEXT NOT NULL,
+  definition TEXT NOT NULL,
   downloaded_at TEXT NOT NULL
+);
+
+-- Compliance Results (individual item assessments)
+CREATE TABLE IF NOT EXISTS compliance_results (
+  id TEXT PRIMARY KEY,
+  report_id TEXT NOT NULL,
+  checklist_id TEXT NOT NULL,
+  item_ref TEXT NOT NULL,
+  item_description TEXT NOT NULL,
+  status TEXT NOT NULL,
+  notes TEXT,
+  evidence_photo_ids TEXT,
+  assessed_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (report_id) REFERENCES report_drafts(id) ON DELETE CASCADE,
+  FOREIGN KEY (checklist_id) REFERENCES checklists(id)
 );
 
 -- Templates (downloaded from server)
@@ -399,4 +434,6 @@ CREATE INDEX IF NOT EXISTS idx_defects_report_id ON defects(report_id);
 CREATE INDEX IF NOT EXISTS idx_roof_elements_report_id ON roof_elements(report_id);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_report_drafts_sync_status ON report_drafts(sync_status);
+CREATE INDEX IF NOT EXISTS idx_compliance_results_report ON compliance_results(report_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_results_checklist ON compliance_results(checklist_id);
 `;

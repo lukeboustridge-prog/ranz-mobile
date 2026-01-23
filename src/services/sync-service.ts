@@ -254,7 +254,7 @@ class SyncEngine {
     for (const checklist of checklists) {
       try {
         // Validate checklist structure
-        if (!checklist.id || !checklist.name || !checklist.items) {
+        if (!checklist.id || !checklist.name) {
           console.warn(`[Sync] Invalid checklist structure: ${checklist.id}`);
           continue;
         }
@@ -262,9 +262,10 @@ class SyncEngine {
         const localChecklist: LocalChecklist = {
           id: checklist.id,
           name: checklist.name,
+          version: checklist.version || "1.0",
           category: checklist.category,
           standard: checklist.standard,
-          itemsJson: JSON.stringify(checklist.items),
+          definition: JSON.stringify(checklist),
           downloadedAt: new Date().toISOString(),
         };
 
@@ -388,15 +389,23 @@ class SyncEngine {
 
     if (!local) return null;
 
-    return {
-      id: local.id,
-      name: local.name,
-      category: local.category,
-      standard: local.standard,
-      items: JSON.parse(local.itemsJson),
-      createdAt: local.downloadedAt,
-      updatedAt: local.downloadedAt,
-    };
+    try {
+      // Parse the full checklist definition
+      const parsed = JSON.parse(local.definition);
+      return {
+        id: local.id,
+        name: local.name,
+        version: local.version,
+        category: local.category,
+        standard: local.standard,
+        sections: parsed.sections || [],
+        items: parsed.items || [],
+        createdAt: local.downloadedAt,
+        updatedAt: local.downloadedAt,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
