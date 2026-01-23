@@ -175,6 +175,11 @@ export interface LocalPhoto {
   annotationsJson: string | null;
   annotatedUri: string | null;
 
+  // Measurements
+  measurementsJson: string | null;
+  calibrationJson: string | null;
+  measuredUri: string | null;
+
   caption: string | null;
   sortOrder: number;
 
@@ -305,7 +310,7 @@ export interface LocalVideo {
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 6; // Incremented for schema changes (v6: added videos table)
+export const DATABASE_VERSION = 7; // Incremented for schema changes (v7: added measurements columns)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -474,6 +479,11 @@ CREATE TABLE IF NOT EXISTS photos (
   -- Annotations
   annotations_json TEXT,
   annotated_uri TEXT,
+
+  -- Measurements
+  measurements_json TEXT,
+  calibration_json TEXT,
+  measured_uri TEXT,
 
   caption TEXT,
   sort_order INTEGER DEFAULT 0,
@@ -745,6 +755,15 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX IF NOT EXISTS idx_videos_report_id ON videos(report_id);
       CREATE INDEX IF NOT EXISTS idx_videos_defect_id ON videos(defect_id);
       CREATE INDEX IF NOT EXISTS idx_videos_sync_status ON videos(sync_status);
+    `,
+  },
+  {
+    version: 7,
+    sql: `
+      -- Migration from v6 to v7: Add measurements columns to photos
+      ALTER TABLE photos ADD COLUMN measurements_json TEXT;
+      ALTER TABLE photos ADD COLUMN calibration_json TEXT;
+      ALTER TABLE photos ADD COLUMN measured_uri TEXT;
     `,
   },
 ];

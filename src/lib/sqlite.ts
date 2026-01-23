@@ -623,6 +623,19 @@ export async function updatePhotoAnnotations(
   );
 }
 
+export async function updatePhotoMeasurements(
+  id: string,
+  measurementsJson: string,
+  calibrationJson: string | null,
+  measuredUri: string
+): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `UPDATE photos SET measurements_json = ?, calibration_json = ?, measured_uri = ?, sync_status = 'pending' WHERE id = ?`,
+    [measurementsJson, calibrationJson, measuredUri, id]
+  );
+}
+
 export async function getPhotoById(id: string): Promise<LocalPhoto | null> {
   const database = getDatabase();
   const result = await database.getFirstAsync<Record<string, unknown>>(
@@ -686,6 +699,9 @@ function mapPhotoRow(row: Record<string, unknown>): LocalPhoto {
     originalHash: row.original_hash as string,
     annotationsJson: row.annotations_json as string | null,
     annotatedUri: row.annotated_uri as string | null,
+    measurementsJson: row.measurements_json as string | null,
+    calibrationJson: row.calibration_json as string | null,
+    measuredUri: row.measured_uri as string | null,
     caption: row.caption as string | null,
     sortOrder: row.sort_order as number,
     syncStatus: row.sync_status as LocalPhoto["syncStatus"],

@@ -31,3 +31,15 @@ export { VideoCapture } from "./VideoCapture";
 // Barcode Scanner
 export { BarcodeScanner } from "./BarcodeScanner";
 export type { ScannedBarcode, BarcodeType } from "./BarcodeScanner";
+
+// Measurement Tool
+export { MeasurementTool } from "./MeasurementTool";
+export type {
+  MeasurementType,
+  Measurement,
+  LineMeasurement,
+  RectMeasurement,
+  PolygonMeasurement,
+  Calibration,
+  Point as MeasurementPoint,
+} from "./MeasurementTool";
