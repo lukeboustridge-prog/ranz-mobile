@@ -15,10 +15,18 @@ import {
 } from "expo-file-system/legacy";
 import * as Device from "expo-device";
 import * as Crypto from "expo-crypto";
-import { savePhoto, getPhotosForReport, addToSyncQueue } from "../lib/sqlite";
+import {
+  savePhoto,
+  getPhotosForReport,
+  addToSyncQueue,
+  deletePhoto as deletePhotoFromDB,
+  getPhotoById,
+} from "../lib/sqlite";
 import { getOrCreateDeviceId } from "../lib/storage";
+import { photoLogger } from "../lib/logger";
 import type { LocalPhoto } from "../types/database";
 import type { PhotoType, QuickTag } from "../types/shared";
+import { deleteAsync, getInfoAsync as getFileInfo } from "expo-file-system/legacy";
 
 // ============================================
 // TYPES
@@ -95,7 +103,7 @@ class PhotoService {
       const { status } = await Camera.Camera.requestCameraPermissionsAsync();
       return status === "granted";
     } catch (error) {
-      console.error("[PhotoService] Camera permission error:", error);
+      photoLogger.exception("Camera permission error", error);
       return false;
     }
   }
@@ -108,7 +116,7 @@ class PhotoService {
       const { status } = await Location.requestForegroundPermissionsAsync();
       return status === "granted";
     } catch (error) {
-      console.error("[PhotoService] Location permission error:", error);
+      photoLogger.exception("Location permission error", error);
       return false;
     }
   }
@@ -122,7 +130,7 @@ class PhotoService {
     try {
       const hasPermission = await this.requestLocationPermission();
       if (!hasPermission) {
-        console.warn("[PhotoService] Location permission not granted");
+        photoLogger.warn("Location permission not granted");
         return;
       }
 
@@ -159,9 +167,9 @@ class PhotoService {
       );
 
       this.isLocationTracking = true;
-      console.log("[PhotoService] Location tracking started");
+      photoLogger.info("Location tracking started");
     } catch (error) {
-      console.error("[PhotoService] Failed to start location tracking:", error);
+      photoLogger.exception("Failed to start location tracking", error);
     }
   }
 
@@ -235,7 +243,7 @@ class PhotoService {
       // Get current GPS data
       const gpsData = this.currentLocation;
       if (!gpsData) {
-        console.warn("[PhotoService] No GPS data available - photo will have null coordinates");
+        photoLogger.warn("No GPS data available - photo will have null coordinates");
       }
 
       this.emitProgress("Capturing image...");
@@ -360,15 +368,14 @@ class PhotoService {
         metadata,
       });
 
-      // Log chain of custody event
-      console.log(`[PhotoService] Photo captured:`, {
+      // Log chain of custody event (sensitive data handled by logger)
+      photoLogger.info("Photo captured", {
         id,
         timestamp,
-        gps: gpsData ? `${gpsData.latitude.toFixed(6)}, ${gpsData.longitude.toFixed(6)}` : "N/A",
-        accuracy: gpsData?.accuracy ?? "N/A",
-        hash: originalHash.substring(0, 16) + "...",
+        hasGps: !!gpsData,
+        gpsAccuracy: gpsData?.accuracy,
+        hashPrefix: originalHash.substring(0, 8),
         device: `${cameraMake} ${cameraModel}`,
-        deviceId,
       });
 
       this.emitProgress("Photo captured successfully!");
@@ -378,7 +385,7 @@ class PhotoService {
         metadata,
       };
     } catch (error) {
-      console.error("[PhotoService] Capture error:", error);
+      photoLogger.exception("Photo capture failed", error);
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown capture error",
@@ -415,14 +422,69 @@ class PhotoService {
   }
 
   /**
-   * Delete a photo
+   * Delete a photo from file system, database, and queue for sync
    */
-  async deletePhoto(photoId: string): Promise<void> {
-    // TODO: Implement photo deletion
-    // - Remove from file system
-    // - Remove from database
-    // - Add delete operation to sync queue
-    console.log(`[PhotoService] Would delete photo ${photoId}`);
+  async deletePhoto(photoId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Get photo details first
+      const photo = await getPhotoById(photoId);
+      if (!photo) {
+        photoLogger.warn("Photo not found for deletion", { photoId });
+        return { success: false, error: "Photo not found" };
+      }
+
+      // Delete from file system
+      if (photo.localUri) {
+        const fileInfo = await getFileInfo(photo.localUri);
+        if (fileInfo.exists) {
+          await deleteAsync(photo.localUri, { idempotent: true });
+          photoLogger.debug("Deleted photo file", { photoId });
+        }
+      }
+
+      // Delete thumbnail if exists
+      if (photo.thumbnailUri) {
+        const thumbInfo = await getFileInfo(photo.thumbnailUri);
+        if (thumbInfo.exists) {
+          await deleteAsync(photo.thumbnailUri, { idempotent: true });
+        }
+      }
+
+      // Delete annotated version if exists
+      if (photo.annotatedUri) {
+        const annotatedInfo = await getFileInfo(photo.annotatedUri);
+        if (annotatedInfo.exists) {
+          await deleteAsync(photo.annotatedUri, { idempotent: true });
+        }
+      }
+
+      // Delete measured version if exists
+      if (photo.measuredUri) {
+        const measuredInfo = await getFileInfo(photo.measuredUri);
+        if (measuredInfo.exists) {
+          await deleteAsync(photo.measuredUri, { idempotent: true });
+        }
+      }
+
+      // Remove from database
+      await deletePhotoFromDB(photoId);
+
+      // Add to sync queue for server deletion
+      await addToSyncQueue("photo", photoId, "delete", {
+        reportId: photo.reportId,
+        originalHash: photo.originalHash,
+      });
+
+      photoLogger.info("Photo deleted", { photoId, reportId: photo.reportId });
+
+      return { success: true };
+    } catch (error) {
+      photoLogger.exception("Failed to delete photo", error, { photoId });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete photo",
+      };
+    }
   }
 
   /**
@@ -452,7 +514,7 @@ class PhotoService {
 
       return { file: blob, metadata: photo };
     } catch (error) {
-      console.error("[PhotoService] Failed to read photo for upload:", error);
+      photoLogger.exception("Failed to read photo for upload", error, { photoId });
       return null;
     }
   }
@@ -473,14 +535,16 @@ class PhotoService {
       const isValid = currentHash === expectedHash;
 
       if (!isValid) {
-        console.warn(`[PhotoService] Hash mismatch for photo ${photoId}`);
-        console.warn(`  Expected: ${expectedHash}`);
-        console.warn(`  Current:  ${currentHash}`);
+        photoLogger.warn("Hash mismatch - photo may have been modified", {
+          photoId,
+          expectedHashPrefix: expectedHash.substring(0, 8),
+          currentHashPrefix: currentHash.substring(0, 8),
+        });
       }
 
       return isValid;
     } catch (error) {
-      console.error("[PhotoService] Failed to validate photo integrity:", error);
+      photoLogger.exception("Failed to validate photo integrity", error, { photoId });
       return false;
     }
   }

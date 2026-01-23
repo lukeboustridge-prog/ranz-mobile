@@ -19,6 +19,14 @@ import { useRouter } from "expo-router";
 import { useLocalDB } from "../../src/hooks/useLocalDB";
 import type { LocalReport, LocalTemplate } from "../../src/types/database";
 import { InspectionType, PropertyType, ReportStatus } from "../../src/types/shared";
+import {
+  validateEmail,
+  validatePhone,
+  validatePostcode,
+  validateBuildingAge,
+  validateRequired,
+  combineValidations,
+} from "../../src/lib/error-handler";
 
 const PROPERTY_TYPES = [
   { value: PropertyType.RESIDENTIAL_1, label: "Residential - 1 storey" },
@@ -69,18 +77,43 @@ export default function NewReportScreen() {
   };
 
   const validateForm = (): boolean => {
-    if (!propertyAddress.trim()) {
-      Alert.alert("Error", "Property address is required");
+    // Required fields
+    const requiredValidation = combineValidations(
+      validateRequired(propertyAddress, "Property address"),
+      validateRequired(propertyCity, "City"),
+      validateRequired(clientName, "Client name")
+    );
+
+    if (!requiredValidation.valid) {
+      Alert.alert("Required Fields", requiredValidation.errors[0]);
       return false;
     }
-    if (!propertyCity.trim()) {
-      Alert.alert("Error", "City is required");
+
+    // Optional field validation
+    const emailValidation = validateEmail(clientEmail);
+    if (!emailValidation.valid) {
+      Alert.alert("Invalid Email", emailValidation.errors[0]);
       return false;
     }
-    if (!clientName.trim()) {
-      Alert.alert("Error", "Client name is required");
+
+    const phoneValidation = validatePhone(clientPhone);
+    if (!phoneValidation.valid) {
+      Alert.alert("Invalid Phone", phoneValidation.errors[0]);
       return false;
     }
+
+    const postcodeValidation = validatePostcode(propertyPostcode);
+    if (!postcodeValidation.valid) {
+      Alert.alert("Invalid Postcode", postcodeValidation.errors[0]);
+      return false;
+    }
+
+    const ageValidation = validateBuildingAge(buildingAge);
+    if (!ageValidation.valid) {
+      Alert.alert("Invalid Building Age", ageValidation.errors[0]);
+      return false;
+    }
+
     return true;
   };
 

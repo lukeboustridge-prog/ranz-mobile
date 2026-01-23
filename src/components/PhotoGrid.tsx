@@ -1,9 +1,10 @@
 /**
  * PhotoGrid Component
- * 2-column grid display of photos with add button
+ * Virtualized 2-column grid display of photos with add button
+ * Optimized for performance with large photo collections
  */
 
-import React from "react";
+import React, { useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -11,8 +12,11 @@ import {
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  FlatList,
+  type ListRenderItemInfo,
 } from "react-native";
 import type { LocalPhoto } from "../types/database";
+import { TOUCH_TARGET, BORDER_RADIUS, COLORS } from "../lib/theme";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const GRID_GAP = 8;
@@ -20,13 +24,109 @@ const GRID_PADDING = 16;
 const NUM_COLUMNS = 2;
 const ITEM_WIDTH = (SCREEN_WIDTH - GRID_PADDING * 2 - GRID_GAP * (NUM_COLUMNS - 1) - 32) / NUM_COLUMNS;
 
+// ============================================
+// TYPES
+// ============================================
+
 interface PhotoGridProps {
   photos: LocalPhoto[];
   onAddPhoto: () => void;
   onRemovePhoto?: (id: string) => void;
   onViewPhoto?: (photo: LocalPhoto) => void;
   showAddButton?: boolean;
+  maxPhotos?: number;
 }
+
+interface AddButtonItem {
+  id: "add-button";
+  type: "add";
+}
+
+type GridItem = LocalPhoto | AddButtonItem;
+
+// ============================================
+// PHOTO ITEM COMPONENT (memoized)
+// ============================================
+
+interface PhotoItemProps {
+  photo: LocalPhoto;
+  onView?: (photo: LocalPhoto) => void;
+  onRemove?: (id: string) => void;
+}
+
+const PhotoItem = memo(function PhotoItem({ photo, onView, onRemove }: PhotoItemProps) {
+  const handlePress = useCallback(() => {
+    onView?.(photo);
+  }, [onView, photo]);
+
+  const handleRemove = useCallback(() => {
+    onRemove?.(photo.id);
+  }, [onRemove, photo.id]);
+
+  return (
+    <TouchableOpacity
+      style={styles.photoContainer}
+      onPress={handlePress}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={photo.caption || `Photo ${photo.id.substring(0, 8)}`}
+      accessibilityHint="Double tap to view full size"
+    >
+      <Image
+        source={{ uri: photo.thumbnailUri || photo.localUri }}
+        style={styles.photo}
+        resizeMode="cover"
+        accessibilityIgnoresInvertColors
+      />
+      {onRemove && (
+        <TouchableOpacity
+          style={styles.removeButton}
+          onPress={handleRemove}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel="Remove photo"
+        >
+          <Text style={styles.removeButtonText}>×</Text>
+        </TouchableOpacity>
+      )}
+      {photo.caption && (
+        <View style={styles.captionContainer}>
+          <Text style={styles.caption} numberOfLines={1}>
+            {photo.caption}
+          </Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+});
+
+// ============================================
+// ADD BUTTON COMPONENT (memoized)
+// ============================================
+
+interface AddButtonProps {
+  onPress: () => void;
+}
+
+const AddButton = memo(function AddButton({ onPress }: AddButtonProps) {
+  return (
+    <TouchableOpacity
+      style={styles.addButton}
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel="Add new photo"
+      accessibilityHint="Opens camera to capture a new photo"
+    >
+      <Text style={styles.addIcon}>+</Text>
+      <Text style={styles.addText}>Add Photo</Text>
+    </TouchableOpacity>
+  );
+});
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 
 export function PhotoGrid({
   photos,
@@ -34,77 +134,93 @@ export function PhotoGrid({
   onRemovePhoto,
   onViewPhoto,
   showAddButton = true,
+  maxPhotos,
 }: PhotoGridProps) {
-  return (
-    <View style={styles.container}>
-      <View style={styles.grid}>
-        {photos.map((photo) => (
-          <TouchableOpacity
-            key={photo.id}
-            style={styles.photoContainer}
-            onPress={() => onViewPhoto?.(photo)}
-            activeOpacity={0.8}
-          >
-            <Image
-              source={{ uri: photo.thumbnailUri || photo.localUri }}
-              style={styles.photo}
-              resizeMode="cover"
-            />
-            {onRemovePhoto && (
-              <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => onRemovePhoto(photo.id)}
-              >
-                <Text style={styles.removeButtonText}>×</Text>
-              </TouchableOpacity>
-            )}
-            {photo.caption && (
-              <View style={styles.captionContainer}>
-                <Text style={styles.caption} numberOfLines={1}>
-                  {photo.caption}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
+  // Build data array with optional add button
+  const addButtonItem: AddButtonItem = { id: "add-button", type: "add" };
+  const data: GridItem[] = [
+    ...photos,
+    ...(showAddButton && (!maxPhotos || photos.length < maxPhotos)
+      ? [addButtonItem]
+      : []),
+  ];
 
-        {showAddButton && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={onAddPhoto}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.addIcon}>+</Text>
-            <Text style={styles.addText}>Add Photo</Text>
-          </TouchableOpacity>
-        )}
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<GridItem>) => {
+      if ("type" in item && item.type === "add") {
+        return <AddButton onPress={onAddPhoto} />;
+      }
+
+      return (
+        <PhotoItem
+          photo={item as LocalPhoto}
+          onView={onViewPhoto}
+          onRemove={onRemovePhoto}
+        />
+      );
+    },
+    [onAddPhoto, onViewPhoto, onRemovePhoto]
+  );
+
+  const keyExtractor = useCallback((item: GridItem) => item.id, []);
+
+  const getItemLayout = useCallback(
+    (_: ArrayLike<GridItem> | null | undefined, index: number) => ({
+      length: ITEM_WIDTH + GRID_GAP,
+      offset: (ITEM_WIDTH + GRID_GAP) * Math.floor(index / NUM_COLUMNS),
+      index,
+    }),
+    []
+  );
+
+  if (photos.length === 0 && !showAddButton) {
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyIcon}>📷</Text>
+        <Text style={styles.emptyText}>No photos</Text>
       </View>
+    );
+  }
 
-      {photos.length === 0 && !showAddButton && (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyIcon}>📷</Text>
-          <Text style={styles.emptyText}>No photos</Text>
-        </View>
-      )}
-    </View>
+  return (
+    <FlatList
+      data={data}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      numColumns={NUM_COLUMNS}
+      columnWrapperStyle={styles.row}
+      contentContainerStyle={styles.container}
+      getItemLayout={getItemLayout}
+      removeClippedSubviews={true}
+      initialNumToRender={6}
+      maxToRenderPerBatch={10}
+      updateCellsBatchingPeriod={50}
+      windowSize={5}
+      scrollEnabled={false} // Usually inside ScrollView
+      accessibilityRole="list"
+      accessibilityLabel={`Photo gallery with ${photos.length} photos`}
+    />
   );
 }
 
+// ============================================
+// STYLES
+// ============================================
+
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 8,
+    paddingBottom: 8,
   },
-  grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  row: {
     gap: GRID_GAP,
+    marginBottom: GRID_GAP,
   },
   photoContainer: {
     width: ITEM_WIDTH,
     height: ITEM_WIDTH,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
     overflow: "hidden",
-    backgroundColor: "#f3f4f6",
+    backgroundColor: COLORS.gray[100],
   },
   photo: {
     width: "100%",
@@ -114,15 +230,15 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 4,
     right: 4,
-    width: 24,
-    height: 24,
+    width: TOUCH_TARGET.minimum / 2, // Small but with hitSlop
+    height: TOUCH_TARGET.minimum / 2,
     borderRadius: 12,
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     justifyContent: "center",
     alignItems: "center",
   },
   removeButtonText: {
-    color: "#ffffff",
+    color: COLORS.white,
     fontSize: 18,
     fontWeight: "600",
     lineHeight: 20,
@@ -137,28 +253,29 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   caption: {
-    color: "#ffffff",
+    color: COLORS.white,
     fontSize: 10,
   },
   addButton: {
     width: ITEM_WIDTH,
     height: ITEM_WIDTH,
-    borderRadius: 8,
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 2,
-    borderColor: "#d1d5db",
+    borderColor: COLORS.gray[300],
     borderStyle: "dashed",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f9fafb",
+    backgroundColor: COLORS.gray[50],
+    minHeight: TOUCH_TARGET.recommended,
   },
   addIcon: {
     fontSize: 28,
-    color: "#9ca3af",
+    color: COLORS.gray[400],
     marginBottom: 4,
   },
   addText: {
     fontSize: 12,
-    color: "#6b7280",
+    color: COLORS.gray[500],
     fontWeight: "500",
   },
   emptyState: {
@@ -172,7 +289,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: "#9ca3af",
+    color: COLORS.gray[400],
   },
 });
 

@@ -6,10 +6,12 @@
 import { useEffect, useState } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/clerk-expo";
-import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus } from "react-native";
+import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus, Text } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import { initializeDatabase } from "../src/lib/sqlite";
 import { startAutoSync, stopAutoSync } from "../src/services/sync-service";
+import { ErrorBoundary } from "../src/components/ErrorBoundary";
+import { appLogger, authLogger } from "../src/lib/logger";
 
 // Import background sync to register the task definition
 // This must be imported at the top level so TaskManager.defineTask runs
@@ -25,7 +27,7 @@ const tokenCache = {
     try {
       return await SecureStore.getItemAsync(key);
     } catch (error) {
-      console.error("Error getting token from SecureStore:", error);
+      authLogger.exception("Error getting token from SecureStore", error);
       return null;
     }
   },
@@ -33,7 +35,7 @@ const tokenCache = {
     try {
       await SecureStore.setItemAsync(key, value);
     } catch (error) {
-      console.error("Error saving token to SecureStore:", error);
+      authLogger.exception("Error saving token to SecureStore", error);
     }
   },
 };
@@ -84,7 +86,7 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
         // Start foreground auto-sync when app is active
         startAutoSync();
       } catch (error) {
-        console.error("Failed to initialize database:", error);
+        appLogger.exception("Failed to initialize database", error);
         setDbError(error instanceof Error ? error : new Error("Database init failed"));
       }
     }
@@ -101,11 +103,11 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === "active") {
         // App came to foreground - start auto-sync
-        console.log("[App] Foreground - starting auto-sync");
+        appLogger.debug("Foreground - starting auto-sync");
         startAutoSync();
       } else if (nextAppState === "background") {
         // App went to background - stop foreground sync (background task handles it)
-        console.log("[App] Background - stopping foreground auto-sync");
+        appLogger.debug("Background - stopping foreground auto-sync");
         stopAutoSync();
       }
     };
@@ -118,10 +120,16 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (dbError) {
-    // In production, show a proper error screen
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#dc2626" />
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>!</Text>
+        <Text style={styles.errorTitle}>Database Error</Text>
+        <Text style={styles.errorMessage}>
+          Unable to initialize the database. Please restart the app.
+        </Text>
+        {__DEV__ && (
+          <Text style={styles.errorDetails}>{dbError.message}</Text>
+        )}
       </View>
     );
   }
@@ -143,17 +151,19 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   // Warn if Clerk key is missing
   if (!CLERK_PUBLISHABLE_KEY) {
-    console.warn("Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY environment variable");
+    authLogger.warn("Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY environment variable");
   }
 
   return (
-    <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-      <ClerkLoaded>
-        <DatabaseProvider>
-          <AuthGuard />
-        </DatabaseProvider>
-      </ClerkLoaded>
-    </ClerkProvider>
+    <ErrorBoundary>
+      <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
+        <ClerkLoaded>
+          <DatabaseProvider>
+            <AuthGuard />
+          </DatabaseProvider>
+        </ClerkLoaded>
+      </ClerkProvider>
+    </ErrorBoundary>
   );
 }
 
@@ -163,5 +173,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#ffffff",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8fafc",
+    padding: 24,
+  },
+  errorIcon: {
+    fontSize: 36,
+    fontWeight: "bold",
+    color: "#ffffff",
+    backgroundColor: "#dc2626",
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    textAlign: "center",
+    lineHeight: 60,
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827",
+    marginBottom: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  errorDetails: {
+    fontSize: 11,
+    color: "#dc2626",
+    marginTop: 16,
+    fontFamily: "monospace",
   },
 });

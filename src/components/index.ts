@@ -49,3 +49,6 @@ export type {
 // Review Components
 export { ReviewActionDialog } from "./ReviewActionDialog";
 export type { ReviewActionType } from "./ReviewActionDialog";
+
+// Error Handling
+export { ErrorBoundary, ScreenErrorBoundary } from "./ErrorBoundary";
