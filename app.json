@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "ranz-mobile",
+    "scheme": "ranz",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -20,7 +20,8 @@
         "NSCameraUsageDescription": "RANZ needs camera access to capture inspection photos.",
         "NSLocationWhenInUseUsageDescription": "RANZ needs location access to record GPS coordinates of inspection photos for evidence integrity.",
         "NSLocationAlwaysUsageDescription": "RANZ needs location access to record GPS coordinates of inspection photos for evidence integrity.",
-        "NSPhotoLibraryUsageDescription": "RANZ needs photo library access to save inspection photos."
+        "NSPhotoLibraryUsageDescription": "RANZ needs photo library access to save inspection photos.",
+        "NSFaceIDUsageDescription": "Use Face ID to unlock the RANZ app"
       }
     },
     "android": {
@@ -57,7 +58,13 @@
           "locationAlwaysAndWhenInUsePermission": "Allow RANZ to use your location for geotagging inspection photos."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow RANZ to use Face ID for quick unlock"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
