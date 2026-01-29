@@ -1,67 +1,69 @@
 /**
  * Root Layout
- * App entry point with Clerk auth provider and navigation setup
+ * App entry point with custom auth and navigation setup
  */
 
 import { useEffect, useState } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
-import { ClerkProvider, ClerkLoaded, useAuth } from "@clerk/clerk-expo";
 import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus, Text } from "react-native";
-import * as SecureStore from "expo-secure-store";
 import { initializeDatabase } from "../src/lib/sqlite";
 import { startAutoSync, stopAutoSync } from "../src/services/sync-service";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
+import { SyncProvider } from "../src/contexts/SyncContext";
 import { appLogger, authLogger } from "../src/lib/logger";
+import { useAuthStore } from "../src/stores/auth-store";
+import { useAuthDeepLink } from "../src/lib/auth/deep-linking";
+import { canUseBiometrics } from "../src/lib/auth/biometrics";
 
 // Import background sync to register the task definition
 // This must be imported at the top level so TaskManager.defineTask runs
 import "../src/services/background-sync";
 import { registerBackgroundSync, unregisterBackgroundSync } from "../src/services/background-sync";
 
-// Clerk publishable key - should be in environment variables
-const CLERK_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
-
-// Token cache for Clerk using SecureStore
-const tokenCache = {
-  async getToken(key: string) {
-    try {
-      return await SecureStore.getItemAsync(key);
-    } catch (error) {
-      authLogger.exception("Error getting token from SecureStore", error);
-      return null;
-    }
-  },
-  async saveToken(key: string, value: string) {
-    try {
-      await SecureStore.setItemAsync(key, value);
-    } catch (error) {
-      authLogger.exception("Error saving token to SecureStore", error);
-    }
-  },
-};
-
 /**
  * Auth Guard Component
  * Redirects users based on authentication state
  */
 function AuthGuard() {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isAuthenticated, isLoading, biometricsEnabled, initialize } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
 
+  // Initialize auth on mount
   useEffect(() => {
-    if (!isLoaded) return;
+    initialize();
+  }, []);
+
+  // Handle deep links for SSO callbacks
+  useAuthDeepLink();
+
+  // Auth routing logic
+  useEffect(() => {
+    if (isLoading) return;
 
     const inAuthGroup = segments[0] === "(auth)";
 
-    if (isSignedIn && inAuthGroup) {
-      // Signed in user trying to access auth pages - redirect to main
+    if (isAuthenticated && inAuthGroup) {
+      // Authenticated user in auth pages - go to main
       router.replace("/(main)/home");
-    } else if (!isSignedIn && !inAuthGroup) {
-      // Not signed in and trying to access protected pages - redirect to login
-      router.replace("/(auth)/login");
+    } else if (!isAuthenticated && !inAuthGroup) {
+      // Not authenticated and trying to access protected pages
+      // Check if biometrics enabled for quick unlock
+      if (biometricsEnabled) {
+        router.replace("/(auth)/biometric-unlock");
+      } else {
+        router.replace("/(auth)/login");
+      }
     }
-  }, [isLoaded, isSignedIn, segments]);
+  }, [isLoading, isAuthenticated, segments, biometricsEnabled]);
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2d5c8f" />
+      </View>
+    );
+  }
 
   return <Slot />;
 }
@@ -142,27 +144,18 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <SyncProvider>{children}</SyncProvider>;
 }
 
 /**
  * Root Layout Component
  */
 export default function RootLayout() {
-  // Warn if Clerk key is missing
-  if (!CLERK_PUBLISHABLE_KEY) {
-    authLogger.warn("Missing EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY environment variable");
-  }
-
   return (
     <ErrorBoundary>
-      <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY} tokenCache={tokenCache}>
-        <ClerkLoaded>
-          <DatabaseProvider>
-            <AuthGuard />
-          </DatabaseProvider>
-        </ClerkLoaded>
-      </ClerkProvider>
+      <DatabaseProvider>
+        <AuthGuard />
+      </DatabaseProvider>
     </ErrorBoundary>
   );
 }
