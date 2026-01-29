@@ -1,16 +1,17 @@
 /**
  * Login Screen
- * Clerk authentication login
+ * Custom JWT authentication login using RANZ auth system
  */
 
 import { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
-import { useSignIn } from "@clerk/clerk-expo";
 import { Link, useRouter } from "expo-router";
+import NetInfo from "@react-native-community/netinfo";
+import { useAuthStore } from "../../src/stores/auth-store";
 
 export default function LoginScreen() {
-  const { signIn, setActive, isLoaded } = useSignIn();
   const router = useRouter();
+  const loginWithEmailPassword = useAuthStore((state) => state.loginWithEmailPassword);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,28 +19,45 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignIn = async () => {
-    if (!isLoaded) return;
+    // Validate inputs
+    if (!email.trim()) {
+      setError("Please enter your email address.");
+      return;
+    }
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
 
     setIsLoading(true);
     setError("");
 
     try {
-      const result = await signIn.create({
-        identifier: email,
-        password,
-      });
+      // Check network connectivity first
+      const netInfo = await NetInfo.fetch();
+      if (!netInfo.isConnected) {
+        setError("No internet connection. Please connect and try again.");
+        setIsLoading(false);
+        return;
+      }
 
-      if (result.status === "complete") {
-        await setActive({ session: result.createdSessionId });
+      // Call custom auth login - uses loginWithEmailPassword which calls API internally
+      const result = await loginWithEmailPassword(email.trim().toLowerCase(), password);
+
+      if (result.success) {
+        // Check if user must change password (first login)
+        if (result.mustChangePassword) {
+          // TODO: Navigate to change password screen when implemented
+          // For now, allow login and show warning
+          console.log("[Login] User must change password on first login");
+        }
         router.replace("/(main)/home");
       } else {
-        console.log("Sign in result:", result);
-        setError("Sign in incomplete. Please try again.");
+        setError(result.error || "Invalid email or password. Please try again.");
       }
-    } catch (err: unknown) {
+    } catch (err) {
       console.error("Sign in error:", err);
-      const error = err as { errors?: Array<{ message: string }> };
-      setError(error.errors?.[0]?.message || "Failed to sign in. Please check your credentials.");
+      setError("Login failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -70,6 +88,8 @@ export default function LoginScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
+              autoComplete="email"
+              editable={!isLoading}
             />
           </View>
 
@@ -79,8 +99,10 @@ export default function LoginScreen() {
               style={styles.input}
               value={password}
               onChangeText={setPassword}
-              placeholder="••••••••"
+              placeholder="Enter your password"
               secureTextEntry
+              autoComplete="password"
+              editable={!isLoading}
             />
           </View>
 
