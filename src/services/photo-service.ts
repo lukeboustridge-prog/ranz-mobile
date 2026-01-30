@@ -9,24 +9,35 @@ import {
   documentDirectory,
   makeDirectoryAsync,
   moveAsync,
+  copyAsync,
   readAsStringAsync,
   getInfoAsync,
+  deleteAsync,
   EncodingType,
 } from "expo-file-system/legacy";
 import * as Device from "expo-device";
-import * as Crypto from "expo-crypto";
 import {
   savePhoto,
   getPhotosForReport,
   addToSyncQueue,
   deletePhoto as deletePhotoFromDB,
   getPhotoById,
+  getUser,
 } from "../lib/sqlite";
 import { getOrCreateDeviceId } from "../lib/storage";
 import { photoLogger } from "../lib/logger";
+import {
+  ensureStorageDirectories,
+  copyToOriginals,
+  getWorkingPath,
+  getOriginalPath,
+  STORAGE_PATHS,
+} from "../lib/file-storage";
+import { generateHashFromBase64, verifyFileHash } from "./evidence-service";
+import { logCapture, logStorage, logVerification } from "./chain-of-custody";
 import type { LocalPhoto } from "../types/database";
 import type { PhotoType, QuickTag } from "../types/shared";
-import { deleteAsync, getInfoAsync as getFileInfo } from "expo-file-system/legacy";
+import { getInfoAsync as getFileInfo } from "expo-file-system/legacy";
 
 // ============================================
 // TYPES
@@ -259,39 +270,81 @@ class PhotoService {
         throw new Error("Failed to capture photo");
       }
 
-      this.emitProgress("Processing image...");
+      // =========================================
+      // EVIDENCE INTEGRITY: Hash BEFORE any file operations
+      // =========================================
+      this.emitProgress("Generating evidence hash...");
 
-      // Generate unique filename
-      const filename = `${localId}.jpg`;
-      const localUri = `${documentDirectory}photos/${filename}`;
-
-      // Ensure photos directory exists
-      const photosDir = `${documentDirectory}photos`;
-      const dirInfo = await getInfoAsync(photosDir);
-      if (!dirInfo.exists) {
-        await makeDirectoryAsync(photosDir, { intermediates: true });
-      }
-
-      // Move photo to permanent location
-      await moveAsync({
-        from: photo.uri,
-        to: localUri,
-      });
-
-      this.emitProgress("Generating hash...");
-
-      // Generate SHA-256 hash for chain of custody
-      const fileContent = await readAsStringAsync(localUri, {
+      // Read the captured photo content immediately
+      const base64Content = await readAsStringAsync(photo.uri, {
         encoding: EncodingType.Base64,
       });
-      const originalHash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        fileContent
-      );
+
+      // Generate SHA-256 hash BEFORE any file operations
+      // This proves the hash reflects the original captured data
+      const hashResult = await generateHashFromBase64(base64Content);
+      const originalHash = hashResult.hash;
+
+      // =========================================
+      // EVIDENCE STORAGE: Copy to immutable originals
+      // =========================================
+      this.emitProgress("Storing evidence...");
+
+      // Ensure storage directories exist
+      await ensureStorageDirectories();
+
+      // Generate filenames
+      const filename = `${localId}.jpg`;
+      const originalFilename = `orig_${filename}`;
+
+      // Copy to immutable originals directory (NEVER modified after this)
+      const originalPath = await copyToOriginals(photo.uri, originalFilename);
+
+      // Copy to working photos directory (for display/annotation)
+      const workingPath = getWorkingPath(filename);
+      await copyAsync({
+        from: photo.uri,
+        to: workingPath,
+      });
+
+      // Clean up temp file
+      await deleteAsync(photo.uri, { idempotent: true });
+
+      const localUri = workingPath;
 
       // Get file info
       const fileInfo = await getInfoAsync(localUri);
       const fileSize = (fileInfo as { size?: number }).size || 0;
+
+      // =========================================
+      // CHAIN OF CUSTODY: Log evidence events
+      // =========================================
+      this.emitProgress("Logging custody chain...");
+
+      // Get current user for audit log
+      const currentUser = await getUser();
+      const userId = currentUser?.id || "unknown";
+      const userName = currentUser?.name || "Unknown User";
+
+      // Log CAPTURED event
+      await logCapture(
+        "photo",
+        id,
+        userId,
+        userName,
+        originalHash,
+        `Captured with ${cameraMake} ${cameraModel}, GPS accuracy: ${gpsData?.accuracy ?? "N/A"}m`
+      );
+
+      // Log STORED event
+      await logStorage(
+        "photo",
+        id,
+        userId,
+        userName,
+        originalHash,
+        originalPath
+      );
 
       // Build metadata object
       const metadata: PhotoMetadata = {
@@ -326,7 +379,7 @@ class PhotoService {
         localUri,
         thumbnailUri: null, // TODO: Generate thumbnail
         filename,
-        originalFilename: filename,
+        originalFilename,
         mimeType: "image/jpeg",
         fileSize,
         photoType,
@@ -369,13 +422,14 @@ class PhotoService {
       });
 
       // Log chain of custody event (sensitive data handled by logger)
-      photoLogger.info("Photo captured", {
+      photoLogger.info("Photo captured with evidence integrity", {
         id,
         timestamp,
         hasGps: !!gpsData,
         gpsAccuracy: gpsData?.accuracy,
         hashPrefix: originalHash.substring(0, 8),
         device: `${cameraMake} ${cameraModel}`,
+        originalPath,
       });
 
       this.emitProgress("Photo captured successfully!");
@@ -521,28 +575,49 @@ class PhotoService {
 
   /**
    * Validate photo integrity using hash
+   * Verifies against the original in immutable storage
    */
-  async validatePhotoIntegrity(photoId: string, localUri: string, expectedHash: string): Promise<boolean> {
+  async validatePhotoIntegrity(
+    photoId: string,
+    expectedHash: string
+  ): Promise<boolean> {
     try {
-      const fileContent = await readAsStringAsync(localUri, {
-        encoding: EncodingType.Base64,
-      });
-      const currentHash = await Crypto.digestStringAsync(
-        Crypto.CryptoDigestAlgorithm.SHA256,
-        fileContent
+      // Get the photo to find its original filename
+      const photo = await getPhotoById(photoId);
+      if (!photo) {
+        photoLogger.warn("Photo not found for integrity validation", { photoId });
+        return false;
+      }
+
+      // Verify using the original file (in immutable originals directory)
+      const originalPath = getOriginalPath(photo.originalFilename);
+      const result = await verifyFileHash(originalPath, expectedHash);
+
+      // Get current user for audit log
+      const currentUser = await getUser();
+      const userId = currentUser?.id || "unknown";
+      const userName = currentUser?.name || "Unknown User";
+
+      // Log verification event
+      await logVerification(
+        "photo",
+        photoId,
+        userId,
+        userName,
+        result.isValid,
+        expectedHash,
+        result.actualHash
       );
 
-      const isValid = currentHash === expectedHash;
-
-      if (!isValid) {
+      if (!result.isValid) {
         photoLogger.warn("Hash mismatch - photo may have been modified", {
           photoId,
           expectedHashPrefix: expectedHash.substring(0, 8),
-          currentHashPrefix: currentHash.substring(0, 8),
+          actualHashPrefix: result.actualHash.substring(0, 8),
         });
       }
 
-      return isValid;
+      return result.isValid;
     } catch (error) {
       photoLogger.exception("Failed to validate photo integrity", error, { photoId });
       return false;
