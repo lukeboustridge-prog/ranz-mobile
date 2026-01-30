@@ -18,8 +18,11 @@ import {
   copyAsync,
   getInfoAsync,
   readAsStringAsync,
+  writeAsStringAsync,
+  deleteAsync,
   EncodingType,
 } from "expo-file-system/legacy";
+import { Platform } from "react-native";
 import type { StoragePaths } from "../types/evidence";
 
 /**
@@ -222,4 +225,63 @@ export function generateEvidenceFilename(extension: string): string {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 9);
   return `evidence_${timestamp}_${random}.${extension}`;
+}
+
+/**
+ * Log storage paths for debugging
+ *
+ * Useful for verifying platform-specific paths during development.
+ * Shows the base document directory and all evidence storage paths.
+ */
+export function logStoragePaths(): void {
+  console.log("[FileStorage] Storage paths configured:");
+  console.log(`  Platform: ${Platform.OS}`);
+  console.log(`  Base: ${documentDirectory}`);
+  console.log(`  Originals: ${STORAGE_PATHS.originals}`);
+  console.log(`  Photos: ${STORAGE_PATHS.photos}`);
+  console.log(`  Thumbnails: ${STORAGE_PATHS.thumbnails}`);
+  console.log(`  Temp: ${STORAGE_PATHS.temp}`);
+}
+
+/**
+ * Verify storage directories exist and are writable
+ *
+ * Returns diagnostic info for troubleshooting storage issues.
+ * Tests each directory by attempting to write and delete a test file.
+ *
+ * @returns Health check result with directory status and platform info
+ */
+export async function verifyStorageHealth(): Promise<{
+  healthy: boolean;
+  directories: Record<string, { exists: boolean; writable: boolean }>;
+  platform: string;
+}> {
+  const directories: Record<string, { exists: boolean; writable: boolean }> = {};
+
+  for (const [name, path] of Object.entries(STORAGE_PATHS)) {
+    const info = await getInfoAsync(path);
+    let writable = false;
+
+    if (info.exists) {
+      // Try to write a test file to verify writability
+      try {
+        const testPath = `${path}.write_test_${Date.now()}`;
+        await writeAsStringAsync(testPath, "test", { encoding: EncodingType.UTF8 });
+        await deleteAsync(testPath, { idempotent: true });
+        writable = true;
+      } catch {
+        writable = false;
+      }
+    }
+
+    directories[name] = { exists: info.exists, writable };
+  }
+
+  const healthy = Object.values(directories).every((d) => d.exists && d.writable);
+
+  return {
+    healthy,
+    directories,
+    platform: Platform.OS,
+  };
 }
