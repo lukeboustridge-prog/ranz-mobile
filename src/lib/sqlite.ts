@@ -1438,3 +1438,79 @@ export async function getAuditLogForEntity(
     createdAt: row.created_at as string,
   }));
 }
+
+/**
+ * Get recent audit log entries across all entities
+ * Useful for debugging and activity monitoring
+ */
+export async function getRecentAuditLogs(limit: number = 50): Promise<LocalAuditLog[]> {
+  const database = getDatabase();
+
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?",
+    [limit]
+  );
+
+  return results.map((row) => ({
+    id: row.id as string,
+    action: row.action as string,
+    entityType: row.entity_type as string,
+    entityId: row.entity_id as string,
+    userId: row.user_id as string,
+    userName: row.user_name as string,
+    details: row.details as string | null,
+    createdAt: row.created_at as string,
+  }));
+}
+
+/**
+ * Get audit log entries filtered by action type
+ */
+export async function getAuditLogsByAction(
+  action: string,
+  limit: number = 100
+): Promise<LocalAuditLog[]> {
+  const database = getDatabase();
+
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    "SELECT * FROM audit_log WHERE action = ? ORDER BY created_at DESC LIMIT ?",
+    [action, limit]
+  );
+
+  return results.map((row) => ({
+    id: row.id as string,
+    action: row.action as string,
+    entityType: row.entity_type as string,
+    entityId: row.entity_id as string,
+    userId: row.user_id as string,
+    userName: row.user_name as string,
+    details: row.details as string | null,
+    createdAt: row.created_at as string,
+  }));
+}
+
+/**
+ * Get count of audit log entries (for statistics)
+ */
+export async function getAuditLogCount(): Promise<number> {
+  const database = getDatabase();
+  const result = await database.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM audit_log"
+  );
+  return result?.count ?? 0;
+}
+
+/**
+ * Get count of audit log entries by entity
+ */
+export async function getAuditLogCountForEntity(
+  entityType: string,
+  entityId: string
+): Promise<number> {
+  const database = getDatabase();
+  const result = await database.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM audit_log WHERE entity_type = ? AND entity_id = ?",
+    [entityType, entityId]
+  );
+  return result?.count ?? 0;
+}
