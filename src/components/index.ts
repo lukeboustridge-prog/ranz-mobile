@@ -20,12 +20,16 @@ export { PhotoGrid } from "./PhotoGrid";
 export { CameraCapture } from "./CameraCapture";
 export type { RoofElementOption } from "./CameraCapture";
 
+// Permissions
+export { PermissionGate } from "./PermissionGate";
+
 // Voice Notes
 export { VoiceNoteRecorder } from "./VoiceNoteRecorder";
 
 // Photo Annotation
 export { PhotoAnnotator } from "./PhotoAnnotator";
 export type { Annotation, AnnotationTool, Point } from "./PhotoAnnotator";
+export { PhotoAnnotationScreen } from "./PhotoAnnotationScreen";
 
 // Video Capture
 export { VideoCapture } from "./VideoCapture";
@@ -49,6 +53,10 @@ export type {
 // Review Components
 export { ReviewActionDialog } from "./ReviewActionDialog";
 export type { ReviewActionType } from "./ReviewActionDialog";
+export { ReviewCommentsPanel } from "./ReviewCommentsPanel";
+
+// Validation Components
+export { PreSubmitChecklist } from "./PreSubmitChecklist";
 
 // Error Handling
 export { ErrorBoundary, ScreenErrorBoundary } from "./ErrorBoundary";
