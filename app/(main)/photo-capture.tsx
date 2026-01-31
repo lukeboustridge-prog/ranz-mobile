@@ -17,6 +17,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import { CameraCapture } from "../../src/components/CameraCapture";
+import { PhotoDetailModal } from "../../src/components/PhotoDetailModal";
 import { useLocalDB } from "../../src/hooks/useLocalDB";
 import type { LocalPhoto } from "../../src/types/database";
 
@@ -34,6 +35,7 @@ export default function PhotoCaptureScreen() {
   const [showCamera, setShowCamera] = useState(false);
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedPhoto, setSelectedPhoto] = useState<LocalPhoto | null>(null);
 
   useEffect(() => {
     checkPermissions();
@@ -72,6 +74,14 @@ export default function PhotoCaptureScreen() {
     loadPhotos();
   };
 
+  const handleViewPhoto = (photo: LocalPhoto) => {
+    setSelectedPhoto(photo);
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedPhoto(null);
+  };
+
   const handleDeletePhoto = (photo: LocalPhoto) => {
     Alert.alert(
       "Delete Photo",
@@ -84,6 +94,7 @@ export default function PhotoCaptureScreen() {
           onPress: async () => {
             try {
               await deletePhoto(photo.id);
+              setSelectedPhoto(null); // Close modal if open
               loadPhotos();
             } catch (error) {
               console.error("Failed to delete photo:", error);
@@ -135,7 +146,10 @@ export default function PhotoCaptureScreen() {
   const renderPhotoItem = ({ item }: { item: LocalPhoto }) => (
     <TouchableOpacity
       style={styles.photoCard}
-      onLongPress={() => handleDeletePhoto(item)}
+      onPress={() => handleViewPhoto(item)}
+      accessibilityRole="button"
+      accessibilityLabel={`View photo ${item.photoType.replace(/_/g, " ")}`}
+      accessibilityHint="Opens photo details"
     >
       <Image source={{ uri: item.localUri }} style={styles.photoImage} />
       <View style={styles.photoInfo}>
@@ -224,6 +238,14 @@ export default function PhotoCaptureScreen() {
           <Text style={styles.captureButtonText}>Open Camera</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Photo Detail Modal */}
+      <PhotoDetailModal
+        photo={selectedPhoto}
+        visible={selectedPhoto !== null}
+        onClose={handleCloseDetail}
+        onDelete={handleDeletePhoto}
+      />
     </View>
   );
 }
