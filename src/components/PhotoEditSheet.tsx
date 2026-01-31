@@ -6,6 +6,8 @@
  * - Overview: Wide shot showing location
  * - Context: Mid-range showing element in context
  * - Detail: Close-up of specific defect/feature
+ *
+ * Also supports linking photos to defects and roof elements after capture.
  */
 
 import React, { useState, useEffect } from "react";
@@ -20,13 +22,15 @@ import {
   Dimensions,
   Platform,
   KeyboardAvoidingView,
+  FlatList,
+  ActivityIndicator,
 } from "react-native";
-import type { LocalPhoto } from "../types/database";
-import { PhotoType, QuickTag } from "../types/shared";
+import type { LocalPhoto, LocalDefect, LocalRoofElement } from "../types/database";
+import { PhotoType, QuickTag, ElementType } from "../types/shared";
 import { COLORS, BORDER_RADIUS, TOUCH_TARGET, SPACING } from "../lib/theme";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
-const SHEET_HEIGHT = SCREEN_HEIGHT * 0.65;
+const SHEET_HEIGHT = SCREEN_HEIGHT * 0.75; // Increased to accommodate new sections
 const MAX_CAPTION_LENGTH = 200;
 
 // ============================================
@@ -36,13 +40,35 @@ const MAX_CAPTION_LENGTH = 200;
 interface PhotoEditSheetProps {
   photo: LocalPhoto | null;
   visible: boolean;
+  reportId: string;
+  defects?: LocalDefect[];
+  elements?: LocalRoofElement[];
   onClose: () => void;
   onSave: (updates: {
     photoType: string;
     quickTag: string | null;
     caption: string | null;
+    defectId: string | null;
+    roofElementId: string | null;
   }) => Promise<void>;
 }
+
+// Element type labels (matching CameraCapture)
+const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
+  [ElementType.ROOF_CLADDING]: "Roof Cladding",
+  [ElementType.RIDGE]: "Ridge",
+  [ElementType.VALLEY]: "Valley",
+  [ElementType.HIP]: "Hip",
+  [ElementType.BARGE]: "Barge",
+  [ElementType.FASCIA]: "Fascia",
+  [ElementType.GUTTER]: "Gutter",
+  [ElementType.DOWNPIPE]: "Downpipe",
+  [ElementType.FLASHING_WALL]: "Wall Flashing",
+  [ElementType.FLASHING_PENETRATION]: "Penetration Flashing",
+  [ElementType.SKYLIGHT]: "Skylight",
+  [ElementType.VENT]: "Vent",
+  [ElementType.OTHER]: "Other",
+};
 
 interface ChipOption {
   value: string;
@@ -106,6 +132,9 @@ function ChipButton({ label, selected, onPress }: ChipButtonProps) {
 export function PhotoEditSheet({
   photo,
   visible,
+  reportId,
+  defects: propDefects,
+  elements: propElements,
   onClose,
   onSave,
 }: PhotoEditSheetProps) {
@@ -114,14 +143,67 @@ export function PhotoEditSheet({
   const [caption, setCaption] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
 
+  // Defect and element association state
+  const [selectedDefectId, setSelectedDefectId] = useState<string | null>(null);
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [localDefects, setLocalDefects] = useState<LocalDefect[]>([]);
+  const [localElements, setLocalElements] = useState<LocalRoofElement[]>([]);
+  const [isLoadingRelations, setIsLoadingRelations] = useState(false);
+  const [showDefectPicker, setShowDefectPicker] = useState(false);
+  const [showElementPicker, setShowElementPicker] = useState(false);
+
   // Initialize form with photo values when opened
   useEffect(() => {
     if (photo && visible) {
       setPhotoType(photo.photoType || PhotoType.GENERAL);
       setQuickTag(photo.quickTag || "");
       setCaption(photo.caption || "");
+      setSelectedDefectId(photo.defectId || null);
+      setSelectedElementId(photo.roofElementId || null);
     }
   }, [photo, visible]);
+
+  // Fetch defects and elements if not provided via props
+  useEffect(() => {
+    if (!visible || !reportId) return;
+
+    // Use props if provided
+    if (propDefects) {
+      setLocalDefects(propDefects);
+    }
+    if (propElements) {
+      setLocalElements(propElements);
+    }
+
+    // If neither provided, fetch from database (native only)
+    if (!propDefects || !propElements) {
+      if (Platform.OS === "web") {
+        // Web doesn't have SQLite access
+        return;
+      }
+
+      setIsLoadingRelations(true);
+      (async () => {
+        try {
+          const sqlite = await import("../lib/sqlite");
+
+          if (!propDefects) {
+            const defects = await sqlite.getDefectsForReport(reportId);
+            setLocalDefects(defects);
+          }
+
+          if (!propElements) {
+            const elements = await sqlite.getRoofElementsForReport(reportId);
+            setLocalElements(elements);
+          }
+        } catch (err) {
+          console.error("[PhotoEditSheet] Failed to fetch relations:", err);
+        } finally {
+          setIsLoadingRelations(false);
+        }
+      })();
+    }
+  }, [visible, reportId, propDefects, propElements]);
 
   const handleSave = async () => {
     if (isSaving) return;
@@ -132,6 +214,8 @@ export function PhotoEditSheet({
         photoType,
         quickTag: quickTag || null,
         caption: caption.trim() || null,
+        defectId: selectedDefectId,
+        roofElementId: selectedElementId,
       });
       onClose();
     } catch (err) {
@@ -139,6 +223,23 @@ export function PhotoEditSheet({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  // Get display label for selected defect
+  const getSelectedDefectLabel = (): string => {
+    if (!selectedDefectId) return "None";
+    const defect = localDefects.find((d) => d.id === selectedDefectId);
+    if (!defect) return "None";
+    return `#${defect.defectNumber}: ${defect.title}`;
+  };
+
+  // Get display label for selected element
+  const getSelectedElementLabel = (): string => {
+    if (!selectedElementId) return "None";
+    const element = localElements.find((e) => e.id === selectedElementId);
+    if (!element) return "None";
+    const typeLabel = ELEMENT_TYPE_LABELS[element.elementType] || element.elementType;
+    return `${typeLabel} - ${element.location}`;
   };
 
   const handleClose = () => {
@@ -237,6 +338,64 @@ export function PhotoEditSheet({
               </View>
             </View>
 
+            {/* Link to Defect Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Link to Defect (Optional)</Text>
+              {isLoadingRelations ? (
+                <ActivityIndicator size="small" color={COLORS.primary[500]} />
+              ) : (
+                <TouchableOpacity
+                  style={styles.selectorButton}
+                  onPress={() => setShowDefectPicker(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select defect"
+                >
+                  <Text
+                    style={[
+                      styles.selectorButtonText,
+                      selectedDefectId && styles.selectorButtonTextSelected,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {getSelectedDefectLabel()}
+                  </Text>
+                  <Text style={styles.selectorArrow}>▼</Text>
+                </TouchableOpacity>
+              )}
+              {localDefects.length === 0 && !isLoadingRelations && (
+                <Text style={styles.noItemsHint}>No defects in this report yet</Text>
+              )}
+            </View>
+
+            {/* Link to Roof Element Section */}
+            <View style={styles.section}>
+              <Text style={styles.sectionLabel}>Link to Roof Element (Optional)</Text>
+              {isLoadingRelations ? (
+                <ActivityIndicator size="small" color={COLORS.primary[500]} />
+              ) : (
+                <TouchableOpacity
+                  style={styles.selectorButton}
+                  onPress={() => setShowElementPicker(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Select roof element"
+                >
+                  <Text
+                    style={[
+                      styles.selectorButtonText,
+                      selectedElementId && styles.selectorButtonTextSelected,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {getSelectedElementLabel()}
+                  </Text>
+                  <Text style={styles.selectorArrow}>▼</Text>
+                </TouchableOpacity>
+              )}
+              {localElements.length === 0 && !isLoadingRelations && (
+                <Text style={styles.noItemsHint}>No roof elements in this report yet</Text>
+              )}
+            </View>
+
             {/* Caption Section */}
             <View style={styles.section}>
               <View style={styles.captionLabelRow}>
@@ -263,6 +422,109 @@ export function PhotoEditSheet({
             <View style={styles.bottomSpacing} />
           </ScrollView>
         </View>
+
+        {/* Defect Picker Modal */}
+        <Modal
+          visible={showDefectPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDefectPicker(false)}
+        >
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerContent}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Select Defect</Text>
+                <TouchableOpacity onPress={() => setShowDefectPicker(false)}>
+                  <Text style={styles.pickerClose}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={[{ id: null, defectNumber: 0, title: "None" }, ...localDefects]}
+                keyExtractor={(item) => item.id || "none"}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.pickerOption,
+                      selectedDefectId === item.id && styles.pickerOptionSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedDefectId(item.id);
+                      setShowDefectPicker(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.pickerOptionText,
+                        selectedDefectId === item.id && styles.pickerOptionTextSelected,
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {item.id ? `#${item.defectNumber}: ${item.title}` : "None (No defect link)"}
+                    </Text>
+                    {selectedDefectId === item.id && (
+                      <Text style={styles.pickerCheckmark}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={styles.pickerList}
+              />
+            </View>
+          </View>
+        </Modal>
+
+        {/* Element Picker Modal */}
+        <Modal
+          visible={showElementPicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowElementPicker(false)}
+        >
+          <View style={styles.pickerOverlay}>
+            <View style={styles.pickerContent}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.pickerTitle}>Select Roof Element</Text>
+                <TouchableOpacity onPress={() => setShowElementPicker(false)}>
+                  <Text style={styles.pickerClose}>Done</Text>
+                </TouchableOpacity>
+              </View>
+              <FlatList
+                data={[{ id: null, elementType: null as unknown as ElementType, location: "None" }, ...localElements]}
+                keyExtractor={(item) => item.id || "none"}
+                renderItem={({ item }) => {
+                  const typeLabel = item.elementType
+                    ? ELEMENT_TYPE_LABELS[item.elementType] || item.elementType
+                    : null;
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.pickerOption,
+                        selectedElementId === item.id && styles.pickerOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setSelectedElementId(item.id);
+                        setShowElementPicker(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.pickerOptionText,
+                          selectedElementId === item.id && styles.pickerOptionTextSelected,
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {typeLabel ? `${typeLabel} - ${item.location}` : "None (No element link)"}
+                      </Text>
+                      {selectedElementId === item.id && (
+                        <Text style={styles.pickerCheckmark}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                }}
+                contentContainerStyle={styles.pickerList}
+              />
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -400,6 +662,99 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 40,
+  },
+  // Selector Button Styles
+  selectorButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.gray[50],
+    borderWidth: 1,
+    borderColor: COLORS.gray[300],
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.md,
+    minHeight: TOUCH_TARGET.minimum,
+  },
+  selectorButtonText: {
+    flex: 1,
+    fontSize: 15,
+    color: COLORS.gray[500],
+  },
+  selectorButtonTextSelected: {
+    color: COLORS.gray[900],
+    fontWeight: "500",
+  },
+  selectorArrow: {
+    color: COLORS.gray[400],
+    fontSize: 12,
+    marginLeft: SPACING.sm,
+  },
+  noItemsHint: {
+    fontSize: 12,
+    color: COLORS.gray[400],
+    fontStyle: "italic",
+    marginTop: SPACING.xs,
+  },
+  // Picker Modal Styles
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  pickerContent: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    maxHeight: "60%",
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.gray[200],
+  },
+  pickerTitle: {
+    fontSize: 17,
+    fontWeight: "600",
+    color: COLORS.gray[900],
+  },
+  pickerClose: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.primary[600],
+  },
+  pickerList: {
+    paddingBottom: 40,
+  },
+  pickerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.gray[100],
+    minHeight: TOUCH_TARGET.recommended,
+  },
+  pickerOptionSelected: {
+    backgroundColor: COLORS.primary[50],
+  },
+  pickerOptionText: {
+    flex: 1,
+    fontSize: 15,
+    color: COLORS.gray[700],
+  },
+  pickerOptionTextSelected: {
+    color: COLORS.primary[700],
+    fontWeight: "500",
+  },
+  pickerCheckmark: {
+    fontSize: 18,
+    color: COLORS.primary[600],
+    fontWeight: "600",
+    marginLeft: SPACING.sm,
   },
 });
 
