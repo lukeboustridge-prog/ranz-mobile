@@ -106,3 +106,16 @@ export interface NetworkStatus {
   type: "wifi" | "cellular" | "unknown" | "none";
   isInternetReachable: boolean | null;
 }
+
+// ============================================
+// DETAILED PROGRESS TRACKING
+// ============================================
+
+export interface DetailedSyncProgress {
+  status: string;
+  progress: number; // 0-100
+  phase: 'idle' | 'uploading_reports' | 'uploading_photos' | 'downloading' | 'complete';
+  currentItem: number;
+  totalItems: number;
+  itemType: 'report' | 'photo' | 'checklist' | 'template' | null;
+}
