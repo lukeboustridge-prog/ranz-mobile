@@ -14,7 +14,7 @@
  * 3. Store both files (original for integrity, working for display/export)
  */
 
-import piexif from "piexifjs";
+import piexif, { ExifObject } from "piexifjs";
 
 /**
  * GPS coordinates for embedding in EXIF
@@ -141,7 +141,7 @@ export function embedGPSInEXIF(base64Jpeg: string, gps: GPSData): string {
     : `data:image/jpeg;base64,${base64Jpeg}`;
 
   // Load existing EXIF or create empty structure
-  let exifObj: piexif.ExifObject;
+  let exifObj: ExifObject;
   try {
     exifObj = piexif.load(dataUri);
   } catch {
