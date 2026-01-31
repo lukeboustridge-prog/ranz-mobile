@@ -83,7 +83,12 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
         setIsDbReady(true);
 
         // Register background sync task after DB is ready
-        await registerBackgroundSync();
+        const registered = await registerBackgroundSync();
+        if (registered) {
+          appLogger.info("Background sync registered successfully");
+        } else {
+          appLogger.warn("Background sync registration failed or not available");
+        }
 
         // Start foreground auto-sync when app is active
         startAutoSync();
