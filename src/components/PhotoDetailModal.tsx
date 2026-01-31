@@ -26,6 +26,8 @@ import {
 import * as Clipboard from "expo-clipboard";
 import type { LocalPhoto } from "../types/database";
 import { COLORS, BORDER_RADIUS, TOUCH_TARGET, SPACING } from "../lib/theme";
+import { PhotoEditSheet } from "./PhotoEditSheet";
+import { useLocalDB } from "../hooks/useLocalDB";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -164,28 +166,63 @@ function Section({ title, children }: SectionProps) {
 // ============================================
 
 export function PhotoDetailModal({
-  photo,
+  photo: initialPhoto,
   visible,
   onClose,
   onEdit,
   onDelete,
 }: PhotoDetailModalProps) {
   const [hashCopied, setHashCopied] = useState(false);
+  const [showEditSheet, setShowEditSheet] = useState(false);
+  const [currentPhoto, setCurrentPhoto] = useState<LocalPhoto | null>(initialPhoto);
+  const { updatePhotoClassification, getPhotoById } = useLocalDB();
+
+  // Sync currentPhoto with initialPhoto when modal opens/closes
+  React.useEffect(() => {
+    setCurrentPhoto(initialPhoto);
+  }, [initialPhoto, visible]);
 
   const handleCopyHash = useCallback(async () => {
-    if (!photo?.originalHash) return;
-    await Clipboard.setStringAsync(photo.originalHash);
+    if (!currentPhoto?.originalHash) return;
+    await Clipboard.setStringAsync(currentPhoto.originalHash);
     setHashCopied(true);
     setTimeout(() => setHashCopied(false), 2000);
-  }, [photo?.originalHash]);
+  }, [currentPhoto?.originalHash]);
 
   const handleDelete = useCallback(() => {
-    if (photo && onDelete) {
-      onDelete(photo);
+    if (currentPhoto && onDelete) {
+      onDelete(currentPhoto);
     }
-  }, [photo, onDelete]);
+  }, [currentPhoto, onDelete]);
 
-  if (!photo) return null;
+  const handleOpenEditSheet = useCallback(() => {
+    setShowEditSheet(true);
+  }, []);
+
+  const handleCloseEditSheet = useCallback(() => {
+    setShowEditSheet(false);
+  }, []);
+
+  const handleSaveClassification = useCallback(async (updates: {
+    photoType: string;
+    quickTag: string | null;
+    caption: string | null;
+  }) => {
+    if (!currentPhoto) return;
+
+    await updatePhotoClassification(currentPhoto.id, updates);
+
+    // Refresh photo data to show updated values
+    const refreshedPhoto = await getPhotoById(currentPhoto.id);
+    if (refreshedPhoto) {
+      setCurrentPhoto(refreshedPhoto);
+    }
+  }, [currentPhoto, updatePhotoClassification, getPhotoById]);
+
+  if (!currentPhoto) return null;
+
+  // Use currentPhoto instead of photo for display
+  const photo = currentPhoto;
 
   const syncStatus = SYNC_STATUS_COLORS[photo.syncStatus] || SYNC_STATUS_COLORS.captured;
   const hasGps = photo.gpsLat !== null && photo.gpsLng !== null;
@@ -211,7 +248,14 @@ export function PhotoDetailModal({
             <Text style={styles.closeButtonText}>Close</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Photo Details</Text>
-          <View style={styles.headerSpacer} />
+          <TouchableOpacity
+            onPress={handleOpenEditSheet}
+            style={styles.editButton}
+            accessibilityRole="button"
+            accessibilityLabel="Edit photo classification"
+          >
+            <Text style={styles.editButtonText}>Edit</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Photo */}
@@ -340,6 +384,14 @@ export function PhotoDetailModal({
           {/* Bottom Padding */}
           <View style={styles.bottomPadding} />
         </ScrollView>
+
+        {/* Edit Sheet */}
+        <PhotoEditSheet
+          photo={currentPhoto}
+          visible={showEditSheet}
+          onClose={handleCloseEditSheet}
+          onSave={handleSaveClassification}
+        />
       </View>
     </Modal>
   );
@@ -376,8 +428,14 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: "600",
   },
-  headerSpacer: {
+  editButton: {
     minWidth: 60,
+    alignItems: "flex-end",
+  },
+  editButtonText: {
+    color: COLORS.primary[400],
+    fontSize: 16,
+    fontWeight: "500",
   },
   imageContainer: {
     height: SCREEN_HEIGHT * 0.4,
