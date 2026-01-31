@@ -272,6 +272,9 @@ export interface LocalVoiceNote {
   recordedAt: string;
   transcription: string | null;
 
+  // Evidence integrity
+  originalHash: string;
+
   // Sync tracking
   syncStatus: SyncStatus;
   uploadedUrl: string | null;
@@ -336,7 +339,7 @@ export interface LocalAuditLog {
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 9; // Incremented for schema changes (v9: added video evidence integrity)
+export const DATABASE_VERSION = 10; // Incremented for schema changes (v10: added voice note evidence integrity)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -544,6 +547,9 @@ CREATE TABLE IF NOT EXISTS voice_notes (
   -- Metadata
   recorded_at TEXT NOT NULL,
   transcription TEXT,
+
+  -- Evidence integrity
+  original_hash TEXT,
 
   -- Sync tracking
   sync_status TEXT NOT NULL DEFAULT 'draft',
@@ -839,6 +845,13 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       -- Migration from v8 to v9: Add video evidence integrity columns
       ALTER TABLE videos ADD COLUMN original_hash TEXT;
       ALTER TABLE videos ADD COLUMN gps_track_json TEXT;
+    `,
+  },
+  {
+    version: 10,
+    sql: `
+      -- Migration from v9 to v10: Add voice note evidence integrity column
+      ALTER TABLE voice_notes ADD COLUMN original_hash TEXT;
     `,
   },
 ];

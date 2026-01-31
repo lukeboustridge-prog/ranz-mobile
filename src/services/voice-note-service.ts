@@ -1,6 +1,10 @@
 /**
  * Voice Note Service
  * Audio recording and playback for inspection observations
+ *
+ * EVIDENCE INTEGRITY: Voice notes for inspection observations must have
+ * forensic integrity for legal proceedings. SHA-256 hash is generated
+ * BEFORE any file operations to ensure the hash reflects original data.
  */
 
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from "expo-av";
@@ -9,6 +13,8 @@ import {
   makeDirectoryAsync,
   getInfoAsync,
   deleteAsync,
+  readAsStringAsync,
+  EncodingType,
 } from "expo-file-system/legacy";
 import {
   saveVoiceNote,
@@ -17,6 +23,8 @@ import {
   deleteVoiceNote as deleteVoiceNoteFromDb,
   addToSyncQueue,
 } from "../lib/sqlite";
+import { generateHashFromBase64 } from "./evidence-service";
+import { logCapture, logStorage } from "./chain-of-custody";
 import type { LocalVoiceNote } from "../types/database";
 
 // ============================================
@@ -33,6 +41,7 @@ export interface VoiceNoteMetadata {
   durationMs: number;
   recordedAt: string;
   transcription: string | null;
+  originalHash?: string;
 }
 
 export interface RecordingResult {
@@ -162,6 +171,15 @@ class VoiceNoteService {
         throw new Error("Recording URI not available");
       }
 
+      // =========================================
+      // EVIDENCE INTEGRITY: Hash BEFORE any file operations
+      // =========================================
+      const base64Content = await readAsStringAsync(uri, {
+        encoding: EncodingType.Base64,
+      });
+      const hashResult = await generateHashFromBase64(base64Content);
+      const originalHash = hashResult.hash;
+
       // Generate unique ID and filename
       const id = `voice_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const filename = `${id}.m4a`;
@@ -204,6 +222,7 @@ class VoiceNoteService {
         durationMs,
         recordedAt: timestamp,
         transcription: null,
+        originalHash,
       };
 
       // Save to database
@@ -219,6 +238,7 @@ class VoiceNoteService {
         durationMs,
         recordedAt: timestamp,
         transcription: null,
+        originalHash,
         syncStatus: "draft",
         uploadedUrl: null,
         syncedAt: null,
@@ -228,18 +248,46 @@ class VoiceNoteService {
 
       await saveVoiceNote(localVoiceNote);
 
+      // =========================================
+      // CHAIN OF CUSTODY: Log capture and storage events
+      // =========================================
+      const userId = "local-user"; // TODO: Get from auth context
+      const userName = "Inspector"; // TODO: Get from auth context
+
+      await logCapture(
+        "voice_note",
+        id,
+        userId,
+        userName,
+        originalHash,
+        `Voice note recorded: ${this.formatDuration(durationMs)}`
+      );
+
+      await logStorage(
+        "voice_note",
+        id,
+        userId,
+        userName,
+        originalHash,
+        uri
+      );
+
       // Add to sync queue
       await addToSyncQueue("voice_note", id, "create", {
         reportId,
         defectId,
         roofElementId,
-        metadata,
+        metadata: {
+          ...metadata,
+          originalHash,
+        },
       });
 
       console.log("[VoiceNoteService] Recording saved:", {
         id,
         durationMs,
         fileSize,
+        originalHash: originalHash.substring(0, 16) + "...",
       });
 
       // Reset state
@@ -360,6 +408,7 @@ class VoiceNoteService {
       durationMs: n.durationMs,
       recordedAt: n.recordedAt,
       transcription: n.transcription,
+      originalHash: n.originalHash,
     }));
   }
 
@@ -378,6 +427,7 @@ class VoiceNoteService {
       durationMs: n.durationMs,
       recordedAt: n.recordedAt,
       transcription: n.transcription,
+      originalHash: n.originalHash,
     }));
   }
 
