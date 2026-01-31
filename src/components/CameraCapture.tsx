@@ -24,6 +24,11 @@ import {
   getGPSAccuracyStatus,
 } from "../services/photo-service";
 import { PhotoType, QuickTag, ElementType } from "../types/shared";
+import {
+  validateCaptureLocation,
+  isApproximateLocation,
+  formatGPSAccuracy,
+} from "../lib/location-utils";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -38,6 +43,7 @@ interface CameraCaptureProps {
   defectId?: string;
   roofElementId?: string;
   roofElements?: RoofElementOption[];
+  propertyLocation?: { latitude: number; longitude: number };
   onCapture: (photoId: string, quickTag?: QuickTag, elementId?: string) => void;
   onClose: () => void;
 }
@@ -76,6 +82,7 @@ export function CameraCapture({
   defectId,
   roofElementId: initialElementId,
   roofElements = [],
+  propertyLocation,
   onCapture,
   onClose,
 }: CameraCaptureProps) {
