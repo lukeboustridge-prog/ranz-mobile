@@ -28,6 +28,7 @@ export function SyncStatus({
 }: SyncStatusProps) {
   const {
     syncState,
+    backgroundStatus,
     isSyncing,
     error,
     progress,
@@ -210,6 +211,25 @@ export function SyncStatus({
                 : "Never"}
             </Text>
           </View>
+
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Background sync</Text>
+            <Text style={[
+              styles.detailValue,
+              { color: backgroundStatus?.isRegistered ? '#22c55e' : '#6b7280' }
+            ]}>
+              {backgroundStatus?.isRegistered ? 'Active' : 'Inactive'}
+            </Text>
+          </View>
+
+          {backgroundStatus?.lastRunAt && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Last background sync</Text>
+              <Text style={styles.detailValue}>
+                {new Date(backgroundStatus.lastRunAt).toLocaleString()}
+              </Text>
+            </View>
+          )}
 
           {error && (
             <View style={styles.errorContainer}>
