@@ -98,6 +98,7 @@ export function CameraCapture({
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string>("");
   const [isApproximate, setIsApproximate] = useState(false);
+  const [locationWarning, setLocationWarning] = useState<string | null>(null);
 
   // Start location tracking on mount
   useEffect(() => {
@@ -133,6 +134,22 @@ export function CameraCapture({
 
     setIsCapturing(true);
     setCaptureStatus("Capturing...");
+
+    // Validate location if property location is provided
+    if (propertyLocation && location) {
+      const validation = validateCaptureLocation(
+        { latitude: location.lat, longitude: location.lng },
+        propertyLocation,
+        500 // 500m threshold
+      );
+
+      if (!validation.isValid && validation.distanceMeters !== null) {
+        // Show warning but don't block capture
+        setLocationWarning(`Photo captured ${validation.distanceMeters}m from property location`);
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => setLocationWarning(null), 5000);
+      }
+    }
 
     try {
       const result = await photoService.capturePhoto(
@@ -253,6 +270,13 @@ export function CameraCapture({
         {captureStatus && (
           <View style={styles.statusOverlay}>
             <Text style={styles.statusText}>{captureStatus}</Text>
+          </View>
+        )}
+
+        {/* Location Warning Overlay */}
+        {locationWarning && (
+          <View style={styles.locationWarningOverlay}>
+            <Text style={styles.locationWarningText}>{locationWarning}</Text>
           </View>
         )}
 
@@ -531,6 +555,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
+  },
+  locationWarningOverlay: {
+    position: "absolute",
+    top: 80,
+    left: 16,
+    right: 16,
+    backgroundColor: "rgba(234,88,12,0.9)",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  locationWarningText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
   },
   bottomControls: {
     position: "absolute",
