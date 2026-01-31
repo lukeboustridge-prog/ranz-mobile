@@ -16,6 +16,7 @@ import {
   readAsStringAsync,
   EncodingType,
 } from "expo-file-system/legacy";
+import * as Location from "expo-location";
 import {
   saveVideo,
   getVideosForReport,
@@ -34,6 +35,18 @@ import type { LocalVideo } from "../types/database";
 // ============================================
 // TYPES
 // ============================================
+
+/**
+ * GPS track point captured during video recording
+ * Collected at 1-second intervals for walkthrough evidence
+ */
+export interface GPSTrackPoint {
+  timestamp: number;     // milliseconds from recording start
+  lat: number;
+  lng: number;
+  altitude: number | null;
+  accuracy: number;
+}
 
 export interface VideoMetadata {
   id: string;
@@ -71,6 +84,8 @@ class VideoService {
   private progressCallback: RecordingProgressCallback | null = null;
   private progressInterval: ReturnType<typeof setInterval> | null = null;
   private currentRecordingPromise: Promise<{ uri: string } | undefined> | null = null;
+  private gpsTrack: GPSTrackPoint[] = [];
+  private gpsTrackInterval: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Register progress callback for recording duration updates
@@ -112,12 +127,33 @@ class VideoService {
         }, 100);
       }
 
+      // Start GPS track collection at 1-second intervals
+      this.gpsTrack = [];
+      this.gpsTrackInterval = setInterval(async () => {
+        try {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.High,
+          });
+
+          this.gpsTrack.push({
+            timestamp: Date.now() - this.recordingStartTime,
+            lat: location.coords.latitude,
+            lng: location.coords.longitude,
+            altitude: location.coords.altitude,
+            accuracy: location.coords.accuracy ?? 0,
+          });
+        } catch (error) {
+          // Don't fail recording if GPS fails - just skip this point
+          console.warn("[VideoService] GPS track point failed:", error);
+        }
+      }, 1000); // 1-second intervals
+
       // Start recording - this returns a promise that resolves when recording stops
       this.currentRecordingPromise = cameraRef.recordAsync({
         maxDuration: 300, // 5 minutes max
       });
 
-      console.log("[VideoService] Recording started");
+      console.log("[VideoService] Recording started with GPS tracking");
       return true;
     } catch (error) {
       console.error("[VideoService] Failed to start recording:", error);
@@ -145,6 +181,30 @@ class VideoService {
         clearInterval(this.progressInterval);
         this.progressInterval = null;
       }
+
+      // Stop GPS tracking
+      if (this.gpsTrackInterval) {
+        clearInterval(this.gpsTrackInterval);
+        this.gpsTrackInterval = null;
+      }
+
+      // Capture final GPS point
+      try {
+        const finalLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+        });
+        this.gpsTrack.push({
+          timestamp: Date.now() - this.recordingStartTime,
+          lat: finalLocation.coords.latitude,
+          lng: finalLocation.coords.longitude,
+          altitude: finalLocation.coords.altitude,
+          accuracy: finalLocation.coords.accuracy ?? 0,
+        });
+      } catch (error) {
+        console.warn("[VideoService] Final GPS point failed:", error);
+      }
+
+      const gpsTrackJson = this.gpsTrack.length > 0 ? JSON.stringify(this.gpsTrack) : null;
 
       const durationMs = Date.now() - this.recordingStartTime;
 
@@ -223,7 +283,7 @@ class VideoService {
         gpsLat: gpsData?.latitude ?? null,
         gpsLng: gpsData?.longitude ?? null,
         originalHash,
-        gpsTrackJson: null, // Placeholder for GPS tracking (14-03)
+        gpsTrackJson,
         syncStatus: "draft",
         uploadedUrl: null,
         syncedAt: null,
@@ -304,6 +364,13 @@ class VideoService {
         clearInterval(this.progressInterval);
         this.progressInterval = null;
       }
+
+      // Stop GPS tracking
+      if (this.gpsTrackInterval) {
+        clearInterval(this.gpsTrackInterval);
+        this.gpsTrackInterval = null;
+      }
+      this.gpsTrack = [];
 
       cameraRef.stopRecording();
 
