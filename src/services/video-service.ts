@@ -357,6 +357,7 @@ class VideoService {
       gpsLat: v.gpsLat,
       gpsLng: v.gpsLng,
       fileSize: v.fileSize,
+      originalHash: v.originalHash,
     }));
   }
 
@@ -382,6 +383,7 @@ class VideoService {
       gpsLat: video.gpsLat,
       gpsLng: video.gpsLng,
       fileSize: video.fileSize,
+      originalHash: video.originalHash,
     };
   }
 
