@@ -40,7 +40,7 @@ import {
   updateSyncState as updateDbSyncState,
   getReportWithRelations,
 } from "../lib/sqlite";
-import { saveLastSyncAt, getLastSyncAt, getOrCreateDeviceId } from "../lib/storage";
+import { saveLastSyncAt, getLastSyncAt, getOrCreateDeviceId, getSyncSettings } from "../lib/storage";
 import type {
   LocalUser,
   LocalChecklist,
@@ -57,6 +57,7 @@ import type {
   SyncError,
   SyncState,
   NetworkStatus,
+  DetailedSyncProgress,
 } from "../types/sync";
 import type {
   Checklist,
@@ -86,8 +87,11 @@ const AUTO_SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutes
 // ============================================
 
 type ProgressCallback = (status: string, progress: number) => void;
+export type DetailedProgressCallback = (progress: DetailedSyncProgress) => void;
 type ErrorCallback = (error: SyncError) => void;
 type StatusCallback = (state: SyncState) => void;
+type ConflictCallback = (conflicts: Array<{ reportId: string; resolution: string }>) => void;
+type SyncCompleteCallback = (result: SyncResult) => void;
 
 interface UploadResult {
   success: boolean;
@@ -103,8 +107,11 @@ interface UploadResult {
 
 class SyncEngine {
   private progressCallback: ProgressCallback | null = null;
+  private detailedProgressCallback: DetailedProgressCallback | null = null;
   private errorCallback: ErrorCallback | null = null;
   private statusCallback: StatusCallback | null = null;
+  private conflictCallback: ConflictCallback | null = null;
+  private syncCompleteCallback: SyncCompleteCallback | null = null;
   private isSyncing: boolean = false;
   private isOnline: boolean = false;
   private autoSyncTimer: ReturnType<typeof setInterval> | null = null;
@@ -166,10 +173,29 @@ class SyncEngine {
     this.statusCallback = callback;
   }
 
+  onConflict(callback: ConflictCallback): void {
+    this.conflictCallback = callback;
+  }
+
+  onSyncComplete(callback: SyncCompleteCallback): void {
+    this.syncCompleteCallback = callback;
+  }
+
+  onDetailedProgress(callback: DetailedProgressCallback): void {
+    this.detailedProgressCallback = callback;
+  }
+
   private emitProgress(status: string, progress: number): void {
     console.log(`[Sync] ${status} (${progress}%)`);
     if (this.progressCallback) {
       this.progressCallback(status, progress);
+    }
+  }
+
+  private emitDetailedProgress(progress: DetailedSyncProgress): void {
+    console.log(`[Sync] ${progress.phase}: ${progress.currentItem}/${progress.totalItems} ${progress.itemType}s (${progress.progress}%)`);
+    if (this.detailedProgressCallback) {
+      this.detailedProgressCallback(progress);
     }
   }
 
@@ -276,7 +302,7 @@ class SyncEngine {
 
       this.emitProgress("Sync complete!", 100);
 
-      return {
+      const result: SyncResult = {
         success: errors.filter((e) => !e.retryable).length === 0,
         downloaded,
         uploaded,
@@ -284,6 +310,13 @@ class SyncEngine {
         duration: Date.now() - startTime,
         timestamp: new Date().toISOString(),
       };
+
+      // Emit sync complete callback
+      if (this.syncCompleteCallback) {
+        this.syncCompleteCallback(result);
+      }
+
+      return result;
     } catch (error) {
       const syncError: SyncError = {
         code: "FULL_SYNC_FAILED",
@@ -407,6 +440,16 @@ class SyncEngine {
 
       this.emitProgress(`Uploading ${reportsToSync.length} reports...`, 30);
 
+      // Emit detailed progress for reports phase
+      this.emitDetailedProgress({
+        status: `Uploading ${reportsToSync.length} reports...`,
+        progress: 30,
+        phase: 'uploading_reports',
+        currentItem: 0,
+        totalItems: reportsToSync.length,
+        itemType: 'report',
+      });
+
       // Send to server
       const response = await this.sendUploadPayload(payload);
 
@@ -424,8 +467,18 @@ class SyncEngine {
       conflicts = response.stats.conflicts;
 
       // Update local sync status for successful reports
+      let reportIndex = 0;
       for (const reportId of response.results.syncedReports) {
+        reportIndex++;
         await this.markReportSynced(reportId);
+        this.emitDetailedProgress({
+          status: `Uploaded report ${reportIndex} of ${response.results.syncedReports.length}`,
+          progress: 30 + Math.round((reportIndex / response.results.syncedReports.length) * 20),
+          phase: 'uploading_reports',
+          currentItem: reportIndex,
+          totalItems: response.results.syncedReports.length,
+          itemType: 'report',
+        });
       }
 
       // Handle failed reports
@@ -442,9 +495,20 @@ class SyncEngine {
 
       // Upload photos that need binary upload
       if (response.results.pendingPhotoUploads.length > 0) {
-        this.emitProgress(`Uploading ${response.results.pendingPhotoUploads.length} photos...`, 60);
+        const totalPhotos = response.results.pendingPhotoUploads.length;
+        this.emitProgress(`Uploading ${totalPhotos} photos...`, 60);
+        this.emitDetailedProgress({
+          status: `Uploading ${totalPhotos} photos...`,
+          progress: 60,
+          phase: 'uploading_photos',
+          currentItem: 0,
+          totalItems: totalPhotos,
+          itemType: 'photo',
+        });
 
+        let photoIndex = 0;
         for (const photoUpload of response.results.pendingPhotoUploads) {
+          photoIndex++;
           try {
             const uploaded = await this.uploadPhotoToPresignedUrl(
               photoUpload.photoId,
@@ -453,6 +517,15 @@ class SyncEngine {
             if (uploaded) {
               photosSynced++;
             }
+            // Emit progress after each photo
+            this.emitDetailedProgress({
+              status: `Uploading photo ${photoIndex} of ${totalPhotos}`,
+              progress: 60 + Math.round((photoIndex / totalPhotos) * 25),
+              phase: 'uploading_photos',
+              currentItem: photoIndex,
+              totalItems: totalPhotos,
+              itemType: 'photo',
+            });
           } catch (error) {
             console.error(`[Sync] Failed to upload photo ${photoUpload.photoId}:`, error);
             errors.push({
@@ -466,15 +539,29 @@ class SyncEngine {
         }
       }
 
-      // Log conflicts
-      for (const conflict of response.results.conflicts) {
-        console.log(
-          `[Sync] Conflict resolved for report ${conflict.reportId}: ` +
-            `${conflict.resolution} (server: ${conflict.serverUpdatedAt}, client: ${conflict.clientUpdatedAt})`
-        );
+      // Log conflicts and notify
+      if (response.results.conflicts.length > 0) {
+        for (const conflict of response.results.conflicts) {
+          console.log(
+            `[Sync] Conflict resolved for report ${conflict.reportId}: ` +
+              `${conflict.resolution} (server: ${conflict.serverUpdatedAt}, client: ${conflict.clientUpdatedAt})`
+          );
+        }
+        // Emit conflict callback
+        if (this.conflictCallback) {
+          this.conflictCallback(response.results.conflicts);
+        }
       }
 
       this.emitProgress("Upload complete", 90);
+      this.emitDetailedProgress({
+        status: "Upload complete",
+        progress: 90,
+        phase: 'complete',
+        currentItem: reportsSynced + photosSynced,
+        totalItems: reportsSynced + photosSynced,
+        itemType: null,
+      });
 
       return {
         success: errors.length === 0,
@@ -675,6 +762,23 @@ class SyncEngine {
         console.error(`[Sync] Photo file not found: ${photo.localUri}`);
         await updatePhotoSyncStatus(photoId, "error", undefined, "File not found");
         return false;
+      }
+
+      // Check WiFi-only setting for large files
+      const syncSettings = await getSyncSettings();
+      if (syncSettings.photosWifiOnly) {
+        const fileSizeMb = photo.fileSize / (1024 * 1024);
+        if (fileSizeMb >= syncSettings.wifiOnlyThresholdMb) {
+          // Check current connection type
+          const netState = await NetInfo.fetch();
+          if (netState.type !== "wifi") {
+            console.log(
+              `[Sync] Photo ${photoId} (${fileSizeMb.toFixed(1)}MB) queued for WiFi upload`
+            );
+            // Keep as pending - will retry when on WiFi
+            return false;
+          }
+        }
       }
 
       await updatePhotoSyncStatus(photoId, "processing");
@@ -1203,4 +1307,16 @@ export function onSyncError(callback: ErrorCallback): void {
 
 export function onSyncStatusChange(callback: StatusCallback): void {
   syncEngine.onStatusChange(callback);
+}
+
+export function onSyncConflict(callback: ConflictCallback): void {
+  syncEngine.onConflict(callback);
+}
+
+export function onSyncComplete(callback: SyncCompleteCallback): void {
+  syncEngine.onSyncComplete(callback);
+}
+
+export function onDetailedProgress(callback: DetailedProgressCallback): void {
+  syncEngine.onDetailedProgress(callback);
 }

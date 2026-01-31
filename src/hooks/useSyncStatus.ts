@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { AppState, AppStateStatus } from "react-native";
-import type { SyncState, SyncResult } from "../types/sync";
+import type { SyncState, SyncResult, DetailedSyncProgress } from "../types/sync";
 import {
   getSyncState,
   fullSync,
@@ -13,6 +13,7 @@ import {
   retryFailedSyncs,
   onSyncProgress,
   onSyncStatusChange,
+  onDetailedProgress,
 } from "../services/sync-service";
 import {
   getBackgroundSyncStatus,
@@ -38,6 +39,7 @@ export interface SyncStatusHook {
   // Progress tracking
   progress: number;
   progressMessage: string;
+  detailedProgress: DetailedSyncProgress | null;
 
   // Actions
   sync: () => Promise<SyncResult>;
@@ -63,6 +65,7 @@ export function useSyncStatus(): SyncStatusHook {
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [progressMessage, setProgressMessage] = useState("");
+  const [detailedProgress, setDetailedProgress] = useState<DetailedSyncProgress | null>(null);
   const [logs, setLogs] = useState<ReturnType<typeof getSyncLogs>>([]);
 
   // Fetch current status
@@ -111,6 +114,10 @@ export function useSyncStatus(): SyncStatusHook {
     onSyncStatusChange((state) => {
       setSyncState(state);
       setIsSyncing(state.isSyncing);
+    });
+
+    onDetailedProgress((progress) => {
+      setDetailedProgress(progress);
     });
   }, []);
 
@@ -211,6 +218,7 @@ export function useSyncStatus(): SyncStatusHook {
     error,
     progress,
     progressMessage,
+    detailedProgress,
     sync,
     syncPending,
     retryFailed,
