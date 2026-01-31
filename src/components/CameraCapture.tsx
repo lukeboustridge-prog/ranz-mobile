@@ -97,6 +97,7 @@ export function CameraCapture({
   const [gpsStatus, setGpsStatus] = useState<{ accuracy: number; status: "none" | "good" | "fair" | "poor" }>({ accuracy: 999, status: "none" });
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string>("");
+  const [isApproximate, setIsApproximate] = useState(false);
 
   // Start location tracking on mount
   useEffect(() => {
@@ -106,6 +107,9 @@ export function CameraCapture({
     const interval = setInterval(() => {
       const status = getGPSAccuracyStatus();
       setGpsStatus(status);
+
+      // Check for iOS approximate location
+      setIsApproximate(isApproximateLocation(status.accuracy));
 
       const loc = getCurrentLocation();
       if (loc) {
@@ -215,6 +219,9 @@ export function CameraCapture({
             <Text style={styles.gpsText}>
               GPS: {gpsStatus.status === "none" ? "No signal" : `±${Math.round(gpsStatus.accuracy)}m`}
             </Text>
+            {isApproximate && (
+              <Text style={styles.approximateWarning}>APPROX</Text>
+            )}
           </View>
 
           <TouchableOpacity style={styles.flashButton} onPress={toggleFlash}>
@@ -432,6 +439,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 12,
     fontWeight: "600",
+  },
+  approximateWarning: {
+    color: "#f59e0b",
+    fontSize: 10,
+    fontWeight: "700",
+    marginLeft: 4,
+    backgroundColor: "rgba(245,158,11,0.2)",
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 2,
   },
   flashButton: {
     width: 40,
