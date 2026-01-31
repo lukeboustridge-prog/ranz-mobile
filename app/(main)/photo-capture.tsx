@@ -1,6 +1,10 @@
 /**
  * Photo Capture Screen
  * Wrapper screen for the CameraCapture component
+ *
+ * Supports two entry modes:
+ * 1. Direct navigation with reportId param (existing flow from report detail)
+ * 2. Quick capture without reportId (shows ReportPickerModal on mount)
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -18,6 +22,7 @@ import { useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import { CameraCapture } from "../../src/components/CameraCapture";
 import { PhotoDetailModal } from "../../src/components/PhotoDetailModal";
+import { ReportPickerModal } from "../../src/components/ReportPickerModal";
 import { OfflineIndicator } from "../../src/components/OfflineIndicator";
 import { useLocalDB } from "../../src/hooks/useLocalDB";
 import type { LocalPhoto } from "../../src/types/database";
@@ -38,10 +43,26 @@ export default function PhotoCaptureScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedPhoto, setSelectedPhoto] = useState<LocalPhoto | null>(null);
 
+  // Report picker state (for quick capture mode without reportId param)
+  const [showReportPicker, setShowReportPicker] = useState(!reportId);
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+
+  // Determine the effective reportId (param takes precedence over picker selection)
+  const effectiveReportId = reportId || selectedReportId;
+
+  // Track if user navigated via direct route (with reportId param)
+  const isDirectNavigation = !!reportId;
+
   useEffect(() => {
     checkPermissions();
-    loadPhotos();
   }, []);
+
+  // Load photos when effective reportId changes
+  useEffect(() => {
+    if (effectiveReportId) {
+      loadPhotos();
+    }
+  }, [effectiveReportId]);
 
   const checkPermissions = async () => {
     // Check location permission
@@ -50,11 +71,11 @@ export default function PhotoCaptureScreen() {
   };
 
   const loadPhotos = async () => {
-    if (!reportId) return;
+    if (!effectiveReportId) return;
 
     setIsLoading(true);
     try {
-      const loadedPhotos = await getPhotos(reportId);
+      const loadedPhotos = await getPhotos(effectiveReportId);
       // Filter by defect or element if provided
       let filtered = loadedPhotos;
       if (defectId) {
@@ -109,21 +130,62 @@ export default function PhotoCaptureScreen() {
     setShowCamera(true);
   };
 
-  if (!reportId) {
+  // Handle report selection from picker
+  const handleReportSelect = (selectedId: string) => {
+    setSelectedReportId(selectedId);
+    setShowReportPicker(false);
+  };
+
+  // Handle close picker without selection
+  const handleClosePicker = () => {
+    setShowReportPicker(false);
+    // If no report selected and no reportId param, go back
+    if (!selectedReportId && !reportId) {
+      router.back();
+    }
+  };
+
+  // Handle create new report from picker
+  const handleCreateNewReport = () => {
+    setShowReportPicker(false);
+    router.push("/(main)/new-report");
+  };
+
+  // Handle change report button (only visible in quick capture mode)
+  const handleChangeReport = () => {
+    setShowReportPicker(true);
+  };
+
+  // Show error state if no report selected after closing picker
+  if (!effectiveReportId && !showReportPicker) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Report ID is required</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
+        <Text style={styles.errorText}>No report selected</Text>
+        <Text style={styles.errorSubtext}>
+          Please select a report to capture photos
+        </Text>
+        <View style={styles.errorButtons}>
+          <TouchableOpacity
+            style={styles.selectReportButton}
+            onPress={() => setShowReportPicker(true)}
+          >
+            <Text style={styles.selectReportButtonText}>Select Report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
-  if (showCamera) {
+  if (showCamera && effectiveReportId) {
     return (
       <CameraCapture
-        reportId={reportId}
+        reportId={effectiveReportId}
         defectId={defectId}
         roofElementId={roofElementId}
         onCapture={handleCapture}
@@ -162,11 +224,30 @@ export default function PhotoCaptureScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Report Picker Modal */}
+      <ReportPickerModal
+        visible={showReportPicker}
+        onSelect={handleReportSelect}
+        onClose={handleClosePicker}
+        onCreateNew={handleCreateNewReport}
+      />
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backLink}>← Back</Text>
-        </TouchableOpacity>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.backLink}>← Back</Text>
+          </TouchableOpacity>
+          {/* Change Report button - only show when user selected report via picker */}
+          {!isDirectNavigation && selectedReportId && (
+            <TouchableOpacity
+              style={styles.changeReportButton}
+              onPress={handleChangeReport}
+            >
+              <Text style={styles.changeReportText}>Change Report</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <Text style={styles.title}>Photo Capture</Text>
         <Text style={styles.subtitle}>
           {defectId
@@ -258,7 +339,6 @@ const styles = StyleSheet.create({
   backLink: {
     color: "#2d5c8f",
     fontSize: 16,
-    marginBottom: 8,
   },
   title: {
     fontSize: 24,
@@ -270,6 +350,23 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginTop: 4,
   },
+  headerTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  changeReportButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#e8eef6",
+    borderRadius: 6,
+  },
+  changeReportText: {
+    color: "#2d5c8f",
+    fontSize: 13,
+    fontWeight: "600",
+  },
   errorContainer: {
     flex: 1,
     justifyContent: "center",
@@ -279,17 +376,42 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 18,
-    color: "#ef4444",
-    marginBottom: 16,
+    color: "#1e293b",
+    marginBottom: 8,
+    fontWeight: "600",
   },
-  backButton: {
+  errorSubtext: {
+    fontSize: 14,
+    color: "#64748b",
+    marginBottom: 24,
+    textAlign: "center",
+  },
+  errorButtons: {
+    gap: 12,
+  },
+  selectReportButton: {
     backgroundColor: "#2d5c8f",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
+    minWidth: 160,
+    alignItems: "center",
+  },
+  selectReportButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  backButton: {
+    backgroundColor: "#e5e7eb",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    minWidth: 160,
+    alignItems: "center",
   },
   backButtonText: {
-    color: "#ffffff",
+    color: "#374151",
     fontSize: 16,
     fontWeight: "600",
   },
