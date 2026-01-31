@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Platform } from "react-native";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Link, useRouter } from "expo-router";
+import { OfflineIndicator } from "../../src/components/OfflineIndicator";
 import type { LocalReport } from "../../src/types/database";
 
 // SQLite is not supported on web - only import on native
@@ -121,6 +122,9 @@ export default function HomeScreen() {
           <Text style={styles.signOutText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Offline Indicator - slides down when offline */}
+      <OfflineIndicator />
 
       {/* Stats Cards */}
       <View style={styles.statsRow}>
