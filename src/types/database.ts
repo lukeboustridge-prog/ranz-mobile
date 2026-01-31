@@ -305,6 +305,12 @@ export interface LocalVideo {
   gpsLat: number | null;
   gpsLng: number | null;
 
+  // Evidence integrity
+  originalHash: string;
+
+  // GPS track (array of coordinates during recording)
+  gpsTrackJson: string | null;
+
   // Sync tracking
   syncStatus: SyncStatus;
   uploadedUrl: string | null;
@@ -330,7 +336,7 @@ export interface LocalAuditLog {
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 8; // Incremented for schema changes (v8: added audit_log table)
+export const DATABASE_VERSION = 9; // Incremented for schema changes (v9: added video evidence integrity)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -577,6 +583,12 @@ CREATE TABLE IF NOT EXISTS videos (
   gps_lat REAL,
   gps_lng REAL,
 
+  -- Evidence integrity
+  original_hash TEXT,
+
+  -- GPS track (JSON array of coordinates during recording)
+  gps_track_json TEXT,
+
   -- Sync tracking
   sync_status TEXT NOT NULL DEFAULT 'draft',
   uploaded_url TEXT,
@@ -819,6 +831,14 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
       CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
       CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
+    `,
+  },
+  {
+    version: 9,
+    sql: `
+      -- Migration from v8 to v9: Add video evidence integrity columns
+      ALTER TABLE videos ADD COLUMN original_hash TEXT;
+      ALTER TABLE videos ADD COLUMN gps_track_json TEXT;
     `,
   },
 ];
