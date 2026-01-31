@@ -18,6 +18,7 @@ import { useCameraPermissions } from "expo-camera";
 import * as Location from "expo-location";
 import { CameraCapture } from "../../src/components/CameraCapture";
 import { PhotoDetailModal } from "../../src/components/PhotoDetailModal";
+import { OfflineIndicator } from "../../src/components/OfflineIndicator";
 import { useLocalDB } from "../../src/hooks/useLocalDB";
 import type { LocalPhoto } from "../../src/types/database";
 
@@ -175,6 +176,9 @@ export default function PhotoCaptureScreen() {
             : "Report Photos"}
         </Text>
       </View>
+
+      {/* Offline Indicator - slides down when offline */}
+      <OfflineIndicator />
 
       {/* Permission Warnings */}
       {!permission?.granted && (
