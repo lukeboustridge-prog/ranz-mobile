@@ -772,9 +772,9 @@ export async function saveVoiceNote(voiceNote: LocalVoiceNote): Promise<void> {
     `INSERT OR REPLACE INTO voice_notes (
       id, report_id, defect_id, roof_element_id,
       local_uri, filename, mime_type, file_size, duration_ms,
-      recorded_at, transcription,
+      recorded_at, transcription, original_hash,
       sync_status, uploaded_url, synced_at, last_sync_error, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       voiceNote.id,
       voiceNote.reportId,
@@ -787,6 +787,7 @@ export async function saveVoiceNote(voiceNote: LocalVoiceNote): Promise<void> {
       voiceNote.durationMs,
       voiceNote.recordedAt,
       voiceNote.transcription,
+      voiceNote.originalHash,
       voiceNote.syncStatus,
       voiceNote.uploadedUrl,
       voiceNote.syncedAt,
@@ -845,6 +846,7 @@ function mapVoiceNoteRow(row: Record<string, unknown>): LocalVoiceNote {
     durationMs: row.duration_ms as number,
     recordedAt: row.recorded_at as string,
     transcription: row.transcription as string | null,
+    originalHash: row.original_hash as string,
     syncStatus: row.sync_status as LocalVoiceNote["syncStatus"],
     uploadedUrl: row.uploaded_url as string | null,
     syncedAt: row.synced_at as string | null,
@@ -864,8 +866,9 @@ export async function saveVideo(video: LocalVideo): Promise<void> {
       id, report_id, defect_id, roof_element_id,
       local_uri, thumbnail_uri, filename, original_filename, mime_type, file_size, duration_ms,
       title, description, recorded_at, gps_lat, gps_lng,
+      original_hash, gps_track_json,
       sync_status, uploaded_url, synced_at, last_sync_error, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       video.id,
       video.reportId,
@@ -883,6 +886,8 @@ export async function saveVideo(video: LocalVideo): Promise<void> {
       video.recordedAt,
       video.gpsLat,
       video.gpsLng,
+      video.originalHash,
+      video.gpsTrackJson,
       video.syncStatus,
       video.uploadedUrl,
       video.syncedAt,
@@ -948,6 +953,8 @@ function mapVideoRow(row: Record<string, unknown>): LocalVideo {
     recordedAt: row.recorded_at as string,
     gpsLat: row.gps_lat as number | null,
     gpsLng: row.gps_lng as number | null,
+    originalHash: row.original_hash as string,
+    gpsTrackJson: row.gps_track_json as string | null,
     syncStatus: row.sync_status as LocalVideo["syncStatus"],
     uploadedUrl: row.uploaded_url as string | null,
     syncedAt: row.synced_at as string | null,

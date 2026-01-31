@@ -1,6 +1,10 @@
 /**
  * Video Service
  * Video recording and management for walkthrough documentation
+ *
+ * CRITICAL: Video files have SHA-256 hash generated IMMEDIATELY after recording
+ * stops, BEFORE any file operations. This ensures evidence integrity for legal
+ * admissibility under the NZ Evidence Act 2006.
  */
 
 import { CameraView } from "expo-camera";
@@ -9,6 +13,8 @@ import {
   makeDirectoryAsync,
   getInfoAsync,
   deleteAsync,
+  readAsStringAsync,
+  EncodingType,
 } from "expo-file-system/legacy";
 import {
   saveVideo,
@@ -21,6 +27,8 @@ import {
   getCurrentLocation,
   type LocationData,
 } from "./photo-service";
+import { generateHashFromBase64 } from "./evidence-service";
+import { logCapture, logStorage } from "./chain-of-custody";
 import type { LocalVideo } from "../types/database";
 
 // ============================================
@@ -42,6 +50,7 @@ export interface VideoMetadata {
   gpsLat: number | null;
   gpsLng: number | null;
   fileSize: number;
+  originalHash?: string;
 }
 
 export interface RecordingResult {
@@ -151,6 +160,19 @@ class VideoService {
 
       const uri = result.uri;
 
+      // =========================================
+      // EVIDENCE INTEGRITY: Hash BEFORE any file operations
+      // =========================================
+      // Read video as base64 and generate SHA-256 hash immediately
+      // This ensures the hash reflects the exact captured data
+      const base64Content = await readAsStringAsync(uri, {
+        encoding: EncodingType.Base64,
+      });
+      const hashResult = await generateHashFromBase64(base64Content);
+      const originalHash = hashResult.hash;
+
+      console.log("[VideoService] Evidence hash generated:", originalHash.substring(0, 16) + "...");
+
       // Generate unique ID and filename
       const id = `video_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       const filename = `${id}.mp4`;
@@ -179,6 +201,7 @@ class VideoService {
         gpsLat: gpsData?.latitude ?? null,
         gpsLng: gpsData?.longitude ?? null,
         fileSize,
+        originalHash,
       };
 
       // Save to database
@@ -199,6 +222,8 @@ class VideoService {
         recordedAt: timestamp,
         gpsLat: gpsData?.latitude ?? null,
         gpsLng: gpsData?.longitude ?? null,
+        originalHash,
+        gpsTrackJson: null, // Placeholder for GPS tracking (14-03)
         syncStatus: "draft",
         uploadedUrl: null,
         syncedAt: null,
@@ -208,18 +233,48 @@ class VideoService {
 
       await saveVideo(localVideo);
 
+      // =========================================
+      // CHAIN OF CUSTODY: Log capture and storage
+      // =========================================
+      // Note: userId and userName should come from auth context
+      // For now, use placeholders that will be replaced when auth integration is complete
+      const userId = "local-user"; // TODO: Get from auth context
+      const userName = "Inspector"; // TODO: Get from auth context
+
+      await logCapture(
+        "video",
+        id,
+        userId,
+        userName,
+        originalHash,
+        `Video recorded: ${durationMs}ms, ${formatVideoFileSize(fileSize)}`
+      );
+
+      await logStorage(
+        "video",
+        id,
+        userId,
+        userName,
+        originalHash,
+        uri
+      );
+
       // Add to sync queue
       await addToSyncQueue("video", id, "create", {
         reportId,
         defectId,
         roofElementId,
-        metadata,
+        metadata: {
+          ...metadata,
+          originalHash,
+        },
       });
 
-      console.log("[VideoService] Recording saved:", {
+      console.log("[VideoService] Recording saved with evidence integrity:", {
         id,
         durationMs,
         fileSize,
+        originalHash: originalHash.substring(0, 16) + "...",
       });
 
       // Reset state
