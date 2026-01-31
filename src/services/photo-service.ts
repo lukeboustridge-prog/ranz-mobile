@@ -37,6 +37,7 @@ import {
 } from "../lib/file-storage";
 import { generateHashFromBase64, verifyFileHash } from "./evidence-service";
 import { logCapture, logStorage, logVerification, logCustodyEvent } from "./chain-of-custody";
+import { getPhotoMimeType, isAcceptableFormat, logFormatInfo } from "../lib/heic-utils";
 import type { LocalPhoto } from "../types/database";
 import type { PhotoType, QuickTag } from "../types/shared";
 import { getInfoAsync as getFileInfo } from "expo-file-system/legacy";
@@ -273,6 +274,16 @@ class PhotoService {
       }
 
       // =========================================
+      // FORMAT VALIDATION: Detect and validate photo format
+      // =========================================
+      const detectedMimeType = getPhotoMimeType(photo.uri);
+      logFormatInfo(photo.uri, detectedMimeType);
+
+      if (!isAcceptableFormat(detectedMimeType)) {
+        throw new Error(`Unsupported photo format: ${detectedMimeType}`);
+      }
+
+      // =========================================
       // EVIDENCE INTEGRITY: Hash BEFORE any file operations
       // =========================================
       this.emitProgress("Generating evidence hash...");
@@ -436,7 +447,7 @@ class PhotoService {
         thumbnailUri: null, // TODO: Generate thumbnail
         filename,
         originalFilename,
-        mimeType: "image/jpeg",
+        mimeType: detectedMimeType,
         fileSize,
         photoType,
         quickTag: quickTag ?? null,
