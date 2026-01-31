@@ -855,6 +855,38 @@ function mapVoiceNoteRow(row: Record<string, unknown>): LocalVoiceNote {
   };
 }
 
+/**
+ * Get voice notes pending upload (for sync)
+ */
+export async function getPendingUploadVoiceNotes(): Promise<LocalVoiceNote[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM voice_notes WHERE sync_status IN ('draft', 'processing', 'error') ORDER BY created_at ASC`
+  );
+  return results.map(mapVoiceNoteRow);
+}
+
+/**
+ * Update voice note sync status after upload attempt
+ */
+export async function updateVoiceNoteSyncStatus(
+  id: string,
+  status: LocalVoiceNote["syncStatus"],
+  uploadedUrl?: string,
+  error?: string
+): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `UPDATE voice_notes SET
+      sync_status = ?,
+      uploaded_url = ?,
+      synced_at = CASE WHEN ? = 'synced' THEN ? ELSE synced_at END,
+      last_sync_error = ?
+    WHERE id = ?`,
+    [status, uploadedUrl || null, status, new Date().toISOString(), error || null, id]
+  );
+}
+
 // ============================================
 // VIDEO OPERATIONS
 // ============================================
@@ -961,6 +993,38 @@ function mapVideoRow(row: Record<string, unknown>): LocalVideo {
     lastSyncError: row.last_sync_error as string | null,
     createdAt: row.created_at as string,
   };
+}
+
+/**
+ * Get videos pending upload (for sync)
+ */
+export async function getPendingUploadVideos(): Promise<LocalVideo[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM videos WHERE sync_status IN ('draft', 'processing', 'error') ORDER BY created_at ASC`
+  );
+  return results.map(mapVideoRow);
+}
+
+/**
+ * Update video sync status after upload attempt
+ */
+export async function updateVideoSyncStatus(
+  id: string,
+  status: LocalVideo["syncStatus"],
+  uploadedUrl?: string,
+  error?: string
+): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `UPDATE videos SET
+      sync_status = ?,
+      uploaded_url = ?,
+      synced_at = CASE WHEN ? = 'synced' THEN ? ELSE synced_at END,
+      last_sync_error = ?
+    WHERE id = ?`,
+    [status, uploadedUrl || null, status, new Date().toISOString(), error || null, id]
+  );
 }
 
 // ============================================

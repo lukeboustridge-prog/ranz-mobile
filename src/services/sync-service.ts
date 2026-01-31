@@ -31,6 +31,10 @@ import {
   getComplianceAssessment,
   getPendingUploadPhotos,
   updatePhotoSyncStatus,
+  getPendingUploadVideos,
+  updateVideoSyncStatus,
+  getPendingUploadVoiceNotes,
+  updateVoiceNoteSyncStatus,
   getSyncQueue,
   removeSyncQueueItem,
   updateSyncQueueAttempt,
@@ -49,8 +53,11 @@ import type {
   LocalRoofElement,
   LocalDefect,
   LocalPhoto,
+  LocalVideo,
+  LocalVoiceNote,
   LocalComplianceAssessment,
 } from "../types/database";
+import { uploadWithResume, shouldUseChunkedUpload } from "../lib/chunked-upload";
 import type {
   SyncProgress,
   SyncResult,
@@ -553,10 +560,54 @@ class SyncEngine {
         }
       }
 
-      this.emitProgress("Upload complete", 90);
+      // Upload pending videos
+      const pendingVideos = await getPendingUploadVideos();
+      if (pendingVideos.length > 0) {
+        const totalVideos = pendingVideos.length;
+        this.emitProgress(`Uploading ${totalVideos} videos...`, 85);
+        this.emitDetailedProgress({
+          status: `Uploading ${totalVideos} videos...`,
+          progress: 85,
+          phase: 'uploading_videos',
+          currentItem: 0,
+          totalItems: totalVideos,
+          itemType: 'video',
+        });
+
+        let videosSynced = 0;
+        for (let i = 0; i < pendingVideos.length; i++) {
+          const video = pendingVideos[i];
+          const uploaded = await this.uploadVideo(video);
+          if (uploaded) {
+            videosSynced++;
+          }
+          this.emitDetailedProgress({
+            status: `Uploading video ${i + 1} of ${totalVideos}`,
+            progress: 85 + Math.round(((i + 1) / totalVideos) * 5),
+            phase: 'uploading_videos',
+            currentItem: i + 1,
+            totalItems: totalVideos,
+            itemType: 'video',
+          });
+        }
+      }
+
+      // Upload pending voice notes
+      const pendingVoiceNotes = await getPendingUploadVoiceNotes();
+      if (pendingVoiceNotes.length > 0) {
+        const totalVoiceNotes = pendingVoiceNotes.length;
+        this.emitProgress(`Uploading ${totalVoiceNotes} voice notes...`, 92);
+
+        for (let i = 0; i < pendingVoiceNotes.length; i++) {
+          const voiceNote = pendingVoiceNotes[i];
+          await this.uploadVoiceNote(voiceNote);
+        }
+      }
+
+      this.emitProgress("Upload complete", 95);
       this.emitDetailedProgress({
         status: "Upload complete",
-        progress: 90,
+        progress: 95,
         phase: 'complete',
         currentItem: reportsSynced + photosSynced,
         totalItems: reportsSynced + photosSynced,
@@ -810,6 +861,160 @@ class SyncEngine {
         "error",
         undefined,
         error instanceof Error ? error.message : "Upload error"
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Upload video using chunked upload for large files
+   */
+  private async uploadVideo(video: LocalVideo): Promise<boolean> {
+    try {
+      // Check if file exists
+      const fileInfo = await FileSystem.getInfoAsync(video.localUri);
+      if (!fileInfo.exists) {
+        console.error(`[Sync] Video file not found: ${video.localUri}`);
+        await updateVideoSyncStatus(video.id, "error", undefined, "File not found");
+        return false;
+      }
+
+      await updateVideoSyncStatus(video.id, "processing");
+
+      const fileSize = (fileInfo as { size: number }).size;
+
+      // Determine upload method based on file size
+      if (shouldUseChunkedUpload(fileSize)) {
+        // Use chunked upload for large files
+        console.log(`[Sync] Using chunked upload for video ${video.id} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
+
+        const result = await uploadWithResume({
+          fileUri: video.localUri,
+          endpoint: `${process.env.EXPO_PUBLIC_API_URL || ""}/api/upload/video`,
+          metadata: {
+            filename: video.filename,
+            originalHash: video.originalHash || "",
+            reportId: video.reportId,
+            videoId: video.id,
+          },
+          onProgress: (bytesUploaded, bytesTotal) => {
+            const percent = Math.round((bytesUploaded / bytesTotal) * 100);
+            console.log(`[Sync] Video ${video.id}: ${percent}% uploaded`);
+          },
+        });
+
+        if (result.success && result.url) {
+          await updateVideoSyncStatus(video.id, "synced", result.url);
+          return true;
+        } else {
+          await updateVideoSyncStatus(video.id, "error", undefined, result.error || "Upload failed");
+          return false;
+        }
+      } else {
+        // Use direct upload for smaller files (existing pattern)
+        // Request presigned URL from server
+        const presignedResponse = await apiClient.post<{ uploadUrl: string; publicUrl: string }>(
+          "/api/upload/video/presign",
+          {
+            videoId: video.id,
+            filename: video.filename,
+            mimeType: video.mimeType,
+            fileSize,
+            originalHash: video.originalHash,
+            reportId: video.reportId,
+          }
+        );
+
+        if (!presignedResponse.data.uploadUrl) {
+          throw new Error("Failed to get presigned URL");
+        }
+
+        const uploadResult = await FileSystem.uploadAsync(
+          presignedResponse.data.uploadUrl,
+          video.localUri,
+          {
+            httpMethod: "PUT",
+            headers: { "Content-Type": video.mimeType },
+            uploadType: FileSystemUploadType.BINARY_CONTENT,
+          }
+        );
+
+        if (uploadResult.status >= 200 && uploadResult.status < 300) {
+          await updateVideoSyncStatus(video.id, "synced", presignedResponse.data.publicUrl);
+          return true;
+        } else {
+          throw new Error(`Upload failed with status ${uploadResult.status}`);
+        }
+      }
+    } catch (error) {
+      console.error(`[Sync] Video upload failed for ${video.id}:`, error);
+      await updateVideoSyncStatus(
+        video.id,
+        "error",
+        undefined,
+        error instanceof Error ? error.message : "Upload failed"
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Upload voice note (direct upload - voice notes are small)
+   */
+  private async uploadVoiceNote(voiceNote: LocalVoiceNote): Promise<boolean> {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(voiceNote.localUri);
+      if (!fileInfo.exists) {
+        console.error(`[Sync] Voice note file not found: ${voiceNote.localUri}`);
+        await updateVoiceNoteSyncStatus(voiceNote.id, "error", undefined, "File not found");
+        return false;
+      }
+
+      await updateVoiceNoteSyncStatus(voiceNote.id, "processing");
+
+      const fileSize = (fileInfo as { size: number }).size;
+
+      // Request presigned URL
+      const presignedResponse = await apiClient.post<{ uploadUrl: string; publicUrl: string }>(
+        "/api/upload/voice-note/presign",
+        {
+          voiceNoteId: voiceNote.id,
+          filename: voiceNote.filename,
+          mimeType: voiceNote.mimeType,
+          fileSize,
+          originalHash: voiceNote.originalHash,
+          reportId: voiceNote.reportId,
+        }
+      );
+
+      if (!presignedResponse.data.uploadUrl) {
+        throw new Error("Failed to get presigned URL");
+      }
+
+      const uploadResult = await FileSystem.uploadAsync(
+        presignedResponse.data.uploadUrl,
+        voiceNote.localUri,
+        {
+          httpMethod: "PUT",
+          headers: { "Content-Type": voiceNote.mimeType },
+          uploadType: FileSystemUploadType.BINARY_CONTENT,
+        }
+      );
+
+      if (uploadResult.status >= 200 && uploadResult.status < 300) {
+        await updateVoiceNoteSyncStatus(voiceNote.id, "synced", presignedResponse.data.publicUrl);
+        console.log(`[Sync] Voice note ${voiceNote.id} uploaded successfully`);
+        return true;
+      } else {
+        throw new Error(`Upload failed with status ${uploadResult.status}`);
+      }
+    } catch (error) {
+      console.error(`[Sync] Voice note upload failed for ${voiceNote.id}:`, error);
+      await updateVoiceNoteSyncStatus(
+        voiceNote.id,
+        "error",
+        undefined,
+        error instanceof Error ? error.message : "Upload failed"
       );
       return false;
     }

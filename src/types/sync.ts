@@ -114,8 +114,8 @@ export interface NetworkStatus {
 export interface DetailedSyncProgress {
   status: string;
   progress: number; // 0-100
-  phase: 'idle' | 'uploading_reports' | 'uploading_photos' | 'downloading' | 'complete';
+  phase: 'idle' | 'uploading_reports' | 'uploading_photos' | 'uploading_videos' | 'uploading_voice_notes' | 'downloading' | 'complete';
   currentItem: number;
   totalItems: number;
-  itemType: 'report' | 'photo' | 'checklist' | 'template' | null;
+  itemType: 'report' | 'photo' | 'video' | 'voice_note' | 'checklist' | 'template' | null;
 }

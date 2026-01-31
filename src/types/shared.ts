@@ -387,7 +387,7 @@ export interface SyncQueueItem {
   lastError: string | null;
 }
 
-export type SyncStatus = "draft" | "pending" | "synced" | "error";
+export type SyncStatus = "draft" | "pending" | "processing" | "synced" | "error";
 
 export type PhotoSyncStatus = "captured" | "processing" | "uploaded" | "synced" | "error";
 
