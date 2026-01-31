@@ -27,20 +27,22 @@ export const AUTH_CONFIG: AuthConfig = {
  * IMPORTANT: This must be the public key corresponding to the private key used by
  * the Quality Program API to sign tokens (JWT_PRIVATE_KEY environment variable).
  *
- * To obtain this key:
- * 1. Access the Quality Program server
- * 2. Get the value of JWT_PUBLIC_KEY environment variable
- * 3. Replace the placeholder below with the actual key
+ * The key format is PEM (PKIX/SPKI) - RS256 algorithm with 2048-bit modulus.
+ * Generated with: node generate-keys.mjs in the Quality Program directory.
  *
- * The key format must be PEM (PKIX/SPKI) starting with "-----BEGIN PUBLIC KEY-----"
- *
- * TODO: Replace with actual public key from Quality Program environment
+ * Key Rotation: When rotating keys, update both:
+ * 1. JWT_PRIVATE_KEY in Quality Program .env.local
+ * 2. JWT_PUBLIC_KEY here in the mobile app
+ * Then publish a new app version.
  */
 export const JWT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-REPLACE_WITH_ACTUAL_PUBLIC_KEY_FROM_QUALITY_PROGRAM
-This is a placeholder. Before deploying to production, obtain the actual
-JWT_PUBLIC_KEY from the Quality Program environment variables and replace
-this entire string with the real PEM-formatted RSA public key.
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1wP16MQhv2lOO5ks9olB
+V9kWEDgO0DhyEuJsT/U2qla3dWVOGkZCeoxM2XvsH/63zUxsef0WmBV559U+KUlq
+ndi2YhES/KZXeQ19+trhjApcN1YtHMY6I5ENhiq6zv+D9RCx3t0v8uZgB9098bgH
+5c3DpGatqLotOg45H3i0Qjio8F0Bl6n+QtezNOoFUke7MxZGonfNVwpT1pLiO+g4
+cfil1NFHec2CHYgsUTm1WhMEnVtpUkUHZXAQi4SXQHgPMUr/D+FyfEIdMVnxBUIv
+QqEfvgSXVGpjqOHEAkq7Fgm+YzuQPw6+lLWynQ9iC7Fj9pWLVtUOHMeG+UnQ4JwP
+zwIDAQAB
 -----END PUBLIC KEY-----`;
 
 /**
