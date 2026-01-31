@@ -661,6 +661,43 @@ export async function getPhotoById(id: string): Promise<LocalPhoto | null> {
 }
 
 /**
+ * Update photo classification and caption
+ * Sets syncStatus to 'pending' to trigger re-sync
+ */
+export async function updatePhotoClassification(
+  id: string,
+  updates: {
+    photoType?: string;
+    quickTag?: string | null;
+    caption?: string | null;
+  }
+): Promise<void> {
+  const database = getDatabase();
+  const sets: string[] = ["sync_status = 'pending'"];
+  const values: (string | null)[] = [];
+
+  if (updates.photoType !== undefined) {
+    sets.push("photo_type = ?");
+    values.push(updates.photoType);
+  }
+  if (updates.quickTag !== undefined) {
+    sets.push("quick_tag = ?");
+    values.push(updates.quickTag);
+  }
+  if (updates.caption !== undefined) {
+    sets.push("caption = ?");
+    values.push(updates.caption);
+  }
+
+  values.push(id); // For WHERE clause
+
+  await database.runAsync(
+    `UPDATE photos SET ${sets.join(", ")} WHERE id = ?`,
+    values
+  );
+}
+
+/**
  * Link a photo to a defect after the defect is saved
  */
 export async function updatePhotoDefectId(photoId: string, defectId: string): Promise<void> {
