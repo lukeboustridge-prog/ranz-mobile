@@ -3,7 +3,7 @@
  * Wrapper screen for the CameraCapture component
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -28,7 +28,7 @@ export default function PhotoCaptureScreen() {
     roofElementId?: string;
   }>();
   const router = useRouter();
-  const { getPhotos, deletePhoto } = useLocalDB();
+  const { getPhotos } = useLocalDB();
 
   const [permission, requestPermission] = useCameraPermissions();
   const [locationPermission, setLocationPermission] = useState<boolean>(false);
@@ -82,29 +82,17 @@ export default function PhotoCaptureScreen() {
     setSelectedPhoto(null);
   };
 
-  const handleDeletePhoto = (photo: LocalPhoto) => {
-    Alert.alert(
-      "Delete Photo",
-      "Are you sure you want to delete this photo?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deletePhoto(photo.id);
-              setSelectedPhoto(null); // Close modal if open
-              loadPhotos();
-            } catch (error) {
-              console.error("Failed to delete photo:", error);
-              Alert.alert("Error", "Failed to delete photo");
-            }
-          },
-        },
-      ]
-    );
-  };
+  /**
+   * Handle photo deletion callback from PhotoDetailModal.
+   * The modal handles the deletion confirmation and actual deletion.
+   * This callback just refreshes the gallery list.
+   */
+  const handleDeletePhoto = useCallback((photo: LocalPhoto) => {
+    // Photo is already deleted by the modal via photoService.deletePhoto
+    // Just refresh the list to reflect the change
+    setSelectedPhoto(null);
+    loadPhotos();
+  }, [loadPhotos]);
 
   const openCamera = async () => {
     if (!permission?.granted) {
