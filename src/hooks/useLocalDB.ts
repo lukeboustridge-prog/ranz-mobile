@@ -262,6 +262,24 @@ export function useLocalDB() {
     }
   }, []);
 
+  const updatePhotoClassification = useCallback(async (
+    id: string,
+    updates: {
+      photoType?: string;
+      quickTag?: string | null;
+      caption?: string | null;
+    }
+  ): Promise<void> => {
+    if (!isNative) return;
+    try {
+      const sqlite = await getSqlite();
+      if (sqlite) await sqlite.updatePhotoClassification(id, updates);
+    } catch (err) {
+      console.error("Failed to update photo classification:", err);
+      throw err;
+    }
+  }, []);
+
   // Compliance operations
   const getComplianceAssessment = useCallback(async (reportId: string): Promise<LocalComplianceAssessment | null> => {
     if (!isNative) return null;
@@ -325,6 +343,7 @@ export function useLocalDB() {
     getPhotosForDefect,
     savePhoto,
     deletePhoto,
+    updatePhotoClassification,
     // Compliance
     getComplianceAssessment,
     saveComplianceAssessment,
