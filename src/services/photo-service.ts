@@ -302,11 +302,41 @@ class PhotoService {
       // Copy to immutable originals directory (NEVER modified after this)
       const originalPath = await copyToOriginals(photo.uri, originalFilename);
 
-      // Copy to working photos directory (for display/annotation)
+      // =========================================
+      // WORKING COPY: Embed GPS in EXIF for external tool compatibility
+      // =========================================
+      this.emitProgress("Embedding GPS in working copy...");
+
+      let workingBase64 = base64Content;
+      let exifEmbedded = false;
+
+      // Only embed GPS if we have valid coordinates
+      if (gpsData && gpsData.latitude && gpsData.longitude) {
+        try {
+          workingBase64 = embedGPSInEXIF(base64Content, {
+            lat: gpsData.latitude,
+            lng: gpsData.longitude,
+            altitude: gpsData.altitude ?? undefined,
+            timestamp: new Date(timestamp),
+          });
+          exifEmbedded = true;
+          photoLogger.debug("GPS embedded in working copy EXIF", {
+            lat: gpsData.latitude.toFixed(6),
+            lng: gpsData.longitude.toFixed(6),
+          });
+        } catch (exifError) {
+          // Non-fatal: working copy will just not have EXIF GPS
+          // Original hash and metadata are still valid
+          photoLogger.warn("Failed to embed GPS in EXIF, using original", {
+            error: exifError instanceof Error ? exifError.message : "Unknown error",
+          });
+        }
+      }
+
+      // Write working copy (with or without embedded GPS)
       const workingPath = getWorkingPath(filename);
-      await copyAsync({
-        from: photo.uri,
-        to: workingPath,
+      await writeAsStringAsync(workingPath, workingBase64, {
+        encoding: EncodingType.Base64,
       });
 
       // Clean up temp file
