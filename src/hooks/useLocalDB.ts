@@ -268,6 +268,8 @@ export function useLocalDB() {
       photoType?: string;
       quickTag?: string | null;
       caption?: string | null;
+      defectId?: string | null;
+      roofElementId?: string | null;
     }
   ): Promise<void> => {
     if (!isNative) return;

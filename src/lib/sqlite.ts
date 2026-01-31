@@ -661,7 +661,7 @@ export async function getPhotoById(id: string): Promise<LocalPhoto | null> {
 }
 
 /**
- * Update photo classification and caption
+ * Update photo classification, caption, and associations
  * Sets syncStatus to 'pending' to trigger re-sync
  */
 export async function updatePhotoClassification(
@@ -670,6 +670,8 @@ export async function updatePhotoClassification(
     photoType?: string;
     quickTag?: string | null;
     caption?: string | null;
+    defectId?: string | null;
+    roofElementId?: string | null;
   }
 ): Promise<void> {
   const database = getDatabase();
@@ -687,6 +689,14 @@ export async function updatePhotoClassification(
   if (updates.caption !== undefined) {
     sets.push("caption = ?");
     values.push(updates.caption);
+  }
+  if (updates.defectId !== undefined) {
+    sets.push("defect_id = ?");
+    values.push(updates.defectId);
+  }
+  if (updates.roofElementId !== undefined) {
+    sets.push("roof_element_id = ?");
+    values.push(updates.roofElementId);
   }
 
   values.push(id); // For WHERE clause
