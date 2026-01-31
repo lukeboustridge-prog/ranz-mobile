@@ -22,12 +22,14 @@ import {
   Dimensions,
   Platform,
   StatusBar,
+  Alert,
 } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import type { LocalPhoto } from "../types/database";
 import { COLORS, BORDER_RADIUS, TOUCH_TARGET, SPACING } from "../lib/theme";
 import { PhotoEditSheet } from "./PhotoEditSheet";
 import { useLocalDB } from "../hooks/useLocalDB";
+import { photoService } from "../services/photo-service";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -190,10 +192,49 @@ export function PhotoDetailModal({
   }, [currentPhoto?.originalHash]);
 
   const handleDelete = useCallback(() => {
-    if (currentPhoto && onDelete) {
-      onDelete(currentPhoto);
+    if (!currentPhoto) return;
+
+    // Check if photo is synced - cannot delete synced photos from mobile
+    const isSynced = currentPhoto.syncStatus === "synced" || currentPhoto.syncStatus === "uploaded";
+
+    if (isSynced) {
+      // Show info alert for synced photos
+      Alert.alert(
+        "Cannot Delete",
+        "This photo has been synced to the server. To delete it, please use the web platform where the full evidence chain of custody can be maintained.",
+        [{ text: "OK", style: "default" }]
+      );
+      return;
     }
-  }, [currentPhoto, onDelete]);
+
+    // Show confirmation dialog for unsynced photos
+    Alert.alert(
+      "Delete Photo",
+      "This will permanently delete this photo and all associated data. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const result = await photoService.deletePhoto(currentPhoto.id);
+            if (result.success) {
+              // Call the onDelete callback to update the parent component
+              if (onDelete) {
+                onDelete(currentPhoto);
+              }
+              onClose();
+            } else {
+              Alert.alert(
+                "Delete Failed",
+                result.error || "Failed to delete photo. Please try again."
+              );
+            }
+          },
+        },
+      ]
+    );
+  }, [currentPhoto, onDelete, onClose]);
 
   const handleOpenEditSheet = useCallback(() => {
     setShowEditSheet(true);
@@ -227,6 +268,9 @@ export function PhotoDetailModal({
   const syncStatus = SYNC_STATUS_COLORS[photo.syncStatus] || SYNC_STATUS_COLORS.captured;
   const hasGps = photo.gpsLat !== null && photo.gpsLng !== null;
   const hasCamera = photo.cameraMake || photo.cameraModel;
+
+  // Synced or uploaded photos cannot be deleted from mobile
+  const canDelete = photo.syncStatus !== "synced" && photo.syncStatus !== "uploaded";
 
   return (
     <Modal
@@ -370,14 +414,30 @@ export function PhotoDetailModal({
           {/* Actions */}
           {onDelete && (
             <View style={styles.actionsContainer}>
-              <TouchableOpacity
-                style={styles.deleteButton}
-                onPress={handleDelete}
-                accessibilityRole="button"
-                accessibilityLabel="Delete photo"
-              >
-                <Text style={styles.deleteButtonText}>Delete Photo</Text>
-              </TouchableOpacity>
+              {canDelete ? (
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={handleDelete}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete photo"
+                >
+                  <Text style={styles.deleteButtonText}>Delete Photo</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.deleteButtonDisabledContainer}>
+                  <TouchableOpacity
+                    style={styles.deleteButtonDisabled}
+                    onPress={handleDelete}
+                    accessibilityRole="button"
+                    accessibilityLabel="Cannot delete synced photo"
+                  >
+                    <Text style={styles.deleteButtonTextDisabled}>Delete Photo</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.deleteDisabledHint}>
+                    Synced photos must be deleted from web
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -571,6 +631,29 @@ const styles = StyleSheet.create({
     color: "#dc2626",
     fontSize: 16,
     fontWeight: "600",
+  },
+  deleteButtonDisabledContainer: {
+    alignItems: "center",
+  },
+  deleteButtonDisabled: {
+    backgroundColor: COLORS.gray[100],
+    paddingVertical: SPACING.md,
+    borderRadius: BORDER_RADIUS.lg,
+    alignItems: "center",
+    minHeight: TOUCH_TARGET.recommended,
+    justifyContent: "center",
+    width: "100%",
+  },
+  deleteButtonTextDisabled: {
+    color: COLORS.gray[400],
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  deleteDisabledHint: {
+    color: COLORS.gray[500],
+    fontSize: 12,
+    marginTop: SPACING.xs,
+    textAlign: "center",
   },
   bottomPadding: {
     height: 40,
