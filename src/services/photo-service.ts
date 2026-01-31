@@ -11,10 +11,12 @@ import {
   moveAsync,
   copyAsync,
   readAsStringAsync,
+  writeAsStringAsync,
   getInfoAsync,
   deleteAsync,
   EncodingType,
 } from "expo-file-system/legacy";
+import { embedGPSInEXIF } from "../lib/exif-utils";
 import * as Device from "expo-device";
 import {
   savePhoto,
