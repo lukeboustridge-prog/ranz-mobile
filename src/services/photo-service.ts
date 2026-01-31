@@ -36,7 +36,7 @@ import {
   STORAGE_PATHS,
 } from "../lib/file-storage";
 import { generateHashFromBase64, verifyFileHash } from "./evidence-service";
-import { logCapture, logStorage, logVerification } from "./chain-of-custody";
+import { logCapture, logStorage, logVerification, logCustodyEvent } from "./chain-of-custody";
 import type { LocalPhoto } from "../types/database";
 import type { PhotoType, QuickTag } from "../types/shared";
 import { getInfoAsync as getFileInfo } from "expo-file-system/legacy";
@@ -377,6 +377,30 @@ class PhotoService {
         originalHash,
         originalPath
       );
+
+      // Log GPS EXIF embedding status (for forensic audit trail)
+      if (exifEmbedded) {
+        await logCustodyEvent(
+          "STORED",
+          "photo",
+          id,
+          userId,
+          userName,
+          originalHash,
+          `GPS embedded in working copy EXIF: ${gpsData?.latitude?.toFixed(6)}, ${gpsData?.longitude?.toFixed(6)}`
+        );
+      } else if (gpsData?.latitude && gpsData?.longitude) {
+        // GPS was available but EXIF embedding failed
+        await logCustodyEvent(
+          "STORED",
+          "photo",
+          id,
+          userId,
+          userName,
+          originalHash,
+          `GPS EXIF embedding failed - coordinates stored in metadata only`
+        );
+      }
 
       // Build metadata object
       const metadata: PhotoMetadata = {
