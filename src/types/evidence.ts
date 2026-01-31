@@ -37,7 +37,8 @@ export type CustodyAction =
   | "SYNCED" // Uploaded to server
   | "EXPORTED" // Shared/exported from app
   | "INCLUDED_IN_REPORT" // Added to a report
-  | "VERIFIED"; // Hash verification performed
+  | "VERIFIED" // Hash verification performed
+  | "DELETED"; // Evidence deleted from device
 
 /**
  * A single chain of custody event

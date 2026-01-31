@@ -544,6 +544,9 @@ class PhotoService {
 
   /**
    * Delete a photo from file system, database, and queue for sync
+   *
+   * IMPORTANT: Only allows deletion of unsynced photos (captured, pending, processing, error).
+   * Synced photos must be deleted from the web platform to maintain evidence chain of custody.
    */
   async deletePhoto(photoId: string): Promise<{ success: boolean; error?: string }> {
     try {
@@ -554,12 +557,26 @@ class PhotoService {
         return { success: false, error: "Photo not found" };
       }
 
-      // Delete from file system
+      // Check sync status - prevent deletion of synced photos
+      if (photo.syncStatus === "synced" || photo.syncStatus === "uploaded") {
+        photoLogger.warn("Cannot delete synced photo from mobile", { photoId, syncStatus: photo.syncStatus });
+        return {
+          success: false,
+          error: "Cannot delete synced photos from mobile. Please use the web platform to delete this photo.",
+        };
+      }
+
+      // Get current user for audit log
+      const currentUser = await getUser();
+      const userId = currentUser?.id || "unknown";
+      const userName = currentUser?.name || "Unknown User";
+
+      // Delete from file system - working copy
       if (photo.localUri) {
         const fileInfo = await getFileInfo(photo.localUri);
         if (fileInfo.exists) {
           await deleteAsync(photo.localUri, { idempotent: true });
-          photoLogger.debug("Deleted photo file", { photoId });
+          photoLogger.debug("Deleted working copy", { photoId });
         }
       }
 
@@ -587,16 +604,53 @@ class PhotoService {
         }
       }
 
+      // Delete original file from evidence/originals/
+      // Original filename format: orig_{photo_id}.jpg
+      if (photo.originalFilename) {
+        const originalPath = getOriginalPath(photo.originalFilename);
+        try {
+          const origInfo = await getFileInfo(originalPath);
+          if (origInfo.exists) {
+            await deleteAsync(originalPath, { idempotent: true });
+            photoLogger.debug("Deleted original file", { photoId, originalPath });
+          }
+        } catch (origError) {
+          // Log but continue - original may not exist
+          photoLogger.warn("Failed to delete original file", {
+            photoId,
+            originalPath,
+            error: origError instanceof Error ? origError.message : "Unknown error",
+          });
+        }
+      }
+
       // Remove from database
       await deletePhotoFromDB(photoId);
 
-      // Add to sync queue for server deletion
+      // Log deletion to chain of custody / audit log
+      await logCustodyEvent(
+        "DELETED",
+        "photo",
+        photoId,
+        userId,
+        userName,
+        photo.originalHash,
+        `Photo deleted from mobile device. Filename: ${photo.filename}, Sync status: ${photo.syncStatus}`
+      );
+
+      // Add to sync queue for server deletion (if photo was ever queued for upload)
       await addToSyncQueue("photo", photoId, "delete", {
         reportId: photo.reportId,
         originalHash: photo.originalHash,
+        deletedAt: new Date().toISOString(),
       });
 
-      photoLogger.info("Photo deleted", { photoId, reportId: photo.reportId });
+      photoLogger.info("Photo deleted", {
+        photoId,
+        reportId: photo.reportId,
+        syncStatus: photo.syncStatus,
+        deletedBy: userName,
+      });
 
       return { success: true };
     } catch (error) {
