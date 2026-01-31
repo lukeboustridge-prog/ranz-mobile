@@ -218,6 +218,17 @@ export function useLocalDB() {
     }
   }, []);
 
+  const getPhotoById = useCallback(async (id: string): Promise<LocalPhoto | null> => {
+    if (!isNative) return null;
+    try {
+      const sqlite = await getSqlite();
+      return sqlite ? await sqlite.getPhotoById(id) : null;
+    } catch (err) {
+      console.error("Failed to get photo:", err);
+      return null;
+    }
+  }, []);
+
   const getPhotosForDefect = useCallback(async (defectId: string): Promise<LocalPhoto[]> => {
     if (!isNative) return [];
     try {
@@ -310,6 +321,7 @@ export function useLocalDB() {
     getTemplates,
     // Photos
     getPhotos,
+    getPhotoById,
     getPhotosForDefect,
     savePhoto,
     deletePhoto,
