@@ -64,6 +64,7 @@ export interface VideoMetadata {
   gpsLng: number | null;
   fileSize: number;
   originalHash?: string;
+  gpsTrack?: GPSTrackPoint[];
 }
 
 export interface RecordingResult {
@@ -262,6 +263,7 @@ class VideoService {
         gpsLng: gpsData?.longitude ?? null,
         fileSize,
         originalHash,
+        gpsTrack: this.gpsTrack.length > 0 ? [...this.gpsTrack] : undefined,
       };
 
       // Save to database
@@ -319,7 +321,7 @@ class VideoService {
         uri
       );
 
-      // Add to sync queue
+      // Add to sync queue with GPS track
       await addToSyncQueue("video", id, "create", {
         reportId,
         defectId,
@@ -327,6 +329,7 @@ class VideoService {
         metadata: {
           ...metadata,
           originalHash,
+          gpsTrack: this.gpsTrack.length > 0 ? this.gpsTrack : undefined,
         },
       });
 
@@ -335,6 +338,7 @@ class VideoService {
         durationMs,
         fileSize,
         originalHash: originalHash.substring(0, 16) + "...",
+        gpsTrackPoints: this.gpsTrack.length,
       });
 
       // Reset state
@@ -405,6 +409,19 @@ class VideoService {
   }
 
   /**
+   * Parse GPS track JSON string into GPSTrackPoint array
+   */
+  private parseGpsTrack(gpsTrackJson: string | null): GPSTrackPoint[] | undefined {
+    if (!gpsTrackJson) return undefined;
+    try {
+      return JSON.parse(gpsTrackJson) as GPSTrackPoint[];
+    } catch {
+      console.warn("[VideoService] Failed to parse GPS track JSON");
+      return undefined;
+    }
+  }
+
+  /**
    * Get videos for a report
    */
   async getVideosForReport(reportId: string): Promise<VideoMetadata[]> {
@@ -425,6 +442,7 @@ class VideoService {
       gpsLng: v.gpsLng,
       fileSize: v.fileSize,
       originalHash: v.originalHash,
+      gpsTrack: this.parseGpsTrack(v.gpsTrackJson),
     }));
   }
 
@@ -451,6 +469,7 @@ class VideoService {
       gpsLng: video.gpsLng,
       fileSize: video.fileSize,
       originalHash: video.originalHash,
+      gpsTrack: this.parseGpsTrack(video.gpsTrackJson),
     };
   }
 
