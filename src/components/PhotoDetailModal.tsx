@@ -248,10 +248,18 @@ export function PhotoDetailModal({
     photoType: string;
     quickTag: string | null;
     caption: string | null;
+    defectId: string | null;
+    roofElementId: string | null;
   }) => {
     if (!currentPhoto) return;
 
-    await updatePhotoClassification(currentPhoto.id, updates);
+    await updatePhotoClassification(currentPhoto.id, {
+      photoType: updates.photoType,
+      quickTag: updates.quickTag,
+      caption: updates.caption,
+      defectId: updates.defectId,
+      roofElementId: updates.roofElementId,
+    });
 
     // Refresh photo data to show updated values
     const refreshedPhoto = await getPhotoById(currentPhoto.id);
@@ -449,6 +457,7 @@ export function PhotoDetailModal({
         <PhotoEditSheet
           photo={currentPhoto}
           visible={showEditSheet}
+          reportId={currentPhoto.reportId}
           onClose={handleCloseEditSheet}
           onSave={handleSaveClassification}
         />
