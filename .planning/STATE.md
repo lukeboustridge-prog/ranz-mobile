@@ -10,11 +10,11 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 11 of 15 (Camera + GPS Capture)
-Plan: 4 of 6 complete (11-01, 11-02, 11-03, 11-05)
+Plan: 5 of 6 complete (11-01, 11-02, 11-03, 11-04, 11-05)
 Status: In progress
-Last activity: 2026-02-05 — Completed 11-05-PLAN.md
+Last activity: 2026-02-05 — Completed 11-04-PLAN.md
 
-Progress: [█████████████████████████████░░░░░░░░░░░░░░░░░░░░░] 48%
+Progress: [██████████████████████████████░░░░░░░░░░░░░░░░░░░░] 50%
 
 ## Accumulated Context
 
@@ -38,6 +38,8 @@ Phase 11 decisions:
 - [cam-07] Haversine formula using WGS84 mean Earth radius (6371000m)
 - [heic-01] expo-camera skipProcessing:false returns JPEG - HEIC utilities primarily for future camera roll import feature
 - [heic-02] HEIC format acceptable for evidence but flagged for web/PDF conversion awareness
+- [perm-01] Permission refresh on app state change for seamless settings return
+- [perm-02] Combined requestAllPermissions function for streamlined permission grant flow
 
 ### Blockers/Concerns
 
@@ -51,16 +53,16 @@ Phase 11 decisions:
 | 1 | 11-01 | GPS EXIF utilities and location validation | complete |
 | 2 | 11-02 | Integrate GPS EXIF embedding in photo capture | complete |
 | 2 | 11-03 | Location validation UI in camera capture | complete |
-| 3 | 11-04 | Permission handling for iOS/Android | pending |
+| 3 | 11-04 | Permission handling for iOS/Android | complete |
 | 3 | 11-05 | HEIC format handling | complete |
 | 4 | 11-06 | Human verification checkpoint | pending |
 
 ## Session Continuity
 
-Last session: 2026-02-05T21:45:00Z
-Stopped at: Completed 11-05-PLAN.md
+Last session: 2026-02-05T08:45:00Z
+Stopped at: Completed 11-04-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-Continue Phase 11 execution: Wave 3 plan 11-04 (Permission handling) is ready, then Wave 4 (11-06 checkpoint)
+Continue Phase 11 execution: Wave 4 plan 11-06 (Human verification checkpoint) is the final plan
