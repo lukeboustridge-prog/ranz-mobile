@@ -10,11 +10,11 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 15 of 15 (Production Polish)
-Plan: 2 of 6 complete
+Plan: 3 of 6 complete
 Status: In progress
-Last activity: 2026-02-07 — Completed 15-02-PLAN.md
+Last activity: 2026-02-07 — Completed 15-03-PLAN.md
 
-Progress: [██████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 33%
+Progress: [████████████████████████████░░░░░░░░░░░░░░░░░░░░░░] 50%
 
 ## Accumulated Context
 
@@ -95,12 +95,15 @@ Phase 15 decisions:
 - [env-02] __DEV__ global used as fallback when EXPO_PUBLIC_APP_ENV not set
 - [env-03] Logging enabled in development and preview, disabled in production
 - [env-04] Environment-aware logging utilities (envLog, envWarn, envError) for controlled output
+- [sentry-01] Sentry only initializes when sentryDsn is configured AND not in development
+- [sentry-02] Trace sampling: 20% in production, 100% in preview for debugging
+- [sentry-03] Sentry.wrap() applied to root component for error boundary integration
 
 ### Blockers/Concerns
 
 - SwiftFox OIDC specification not yet available — mobile uses custom auth, SSO scaffolding ready when spec received
 - iOS location permission approval rate — need mitigation strategy for "approximate location" denials (addressed in Phase 11 with warning UI)
-- Sentry Expo 54 compatibility — verify after installation (GitHub issue #5103 mentioned in research)
+- Sentry project setup required — need to create Sentry project and configure EXPO_PUBLIC_SENTRY_DSN and SENTRY_AUTH_TOKEN secrets in EAS
 
 ## Phase 15 Plans
 
@@ -108,19 +111,19 @@ Phase 15 decisions:
 |------|------|-----------|--------|
 | 1 | 15-01 | EAS Build configuration | complete |
 | 1 | 15-02 | Environment configuration | complete |
-| 2 | 15-03 | Sentry crash reporting integration | not started |
+| 2 | 15-03 | Sentry crash reporting integration | complete |
 | 3 | 15-04 | Jest testing infrastructure | not started |
 | 3 | 15-05 | README documentation | not started |
 | 4 | 15-06 | Human verification checkpoint | not started |
 
 ## Session Continuity
 
-Last session: 2026-02-07T04:00Z
-Stopped at: Completed 15-01-PLAN.md (resumed after EAS auth gate)
+Last session: 2026-02-07T04:20Z
+Stopped at: Completed 15-03-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-Continue Phase 15: Execute 15-03 (Sentry integration)
+Continue Phase 15: Execute 15-04 (Jest testing infrastructure)
 
 Note: Phases 13 and 14 verification were skipped. Run `/gsd:verify-work 13` and `/gsd:verify-work 14` before production deployment.
