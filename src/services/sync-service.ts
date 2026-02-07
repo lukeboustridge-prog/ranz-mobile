@@ -58,6 +58,7 @@ import type {
   LocalComplianceAssessment,
 } from "../types/database";
 import { uploadWithResume, shouldUseChunkedUpload } from "../lib/chunked-upload";
+import { logSync as logCustodySync } from "./chain-of-custody";
 import type {
   SyncProgress,
   SyncResult,
@@ -126,6 +127,23 @@ class SyncEngine {
 
   constructor() {
     this.initializeNetworkListener();
+  }
+
+  /**
+   * Get current user info for custody logging
+   * Returns userId and userName for audit trail
+   */
+  private async getCurrentUser(): Promise<{ userId: string; userName: string }> {
+    try {
+      const user = await getUser();
+      if (user) {
+        return { userId: user.id, userName: user.name };
+      }
+    } catch (error) {
+      console.warn('[Sync] Could not get user for custody logging:', error);
+    }
+    // Fallback for when user not available
+    return { userId: 'system', userName: 'System Sync' };
   }
 
   // ============================================
