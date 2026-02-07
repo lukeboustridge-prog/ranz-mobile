@@ -68,7 +68,14 @@
           "faceIDPermission": "Allow RANZ to use Face ID for quick unlock"
         }
       ],
-      "expo-background-task"
+      "expo-background-task",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "ranz",
+          "project": "ranz-mobile"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
