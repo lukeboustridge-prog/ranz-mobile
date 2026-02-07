@@ -82,9 +82,10 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 
 ---
 
-### Phase 13: Offline Sync
+### Phase 13: Offline Sync (COMPLETE)
 **Goal:** App works fully offline and syncs when connectivity restored
-**Status:** Planned
+**Status:** COMPLETE (verification skipped)
+**Completed:** 2026-02-07
 **Dependencies:** Phase 11 (camera capture)
 
 **Requirements:**
@@ -105,11 +106,11 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 5. Conflict modal shows when server version differs from local
 
 **Plans:** 5 plans in 4 waves
-- [ ] 13-01-PLAN.md — Background task migration and idempotency keys (Wave 1)
-- [ ] 13-02-PLAN.md — Chain of custody SYNCED events wiring (Wave 1)
-- [ ] 13-03-PLAN.md — Retry queue with max attempts and hash verification (Wave 2)
-- [ ] 13-04-PLAN.md — Conflict resolution UI and sync status bar (Wave 3)
-- [ ] 13-05-PLAN.md — Human verification checkpoint (Wave 4)
+- [x] 13-01-PLAN.md — Background task migration and idempotency keys (Wave 1)
+- [x] 13-02-PLAN.md — Chain of custody SYNCED events wiring (Wave 1)
+- [x] 13-03-PLAN.md — Retry queue with max attempts and hash verification (Wave 2)
+- [x] 13-04-PLAN.md — Conflict resolution UI and sync status bar (Wave 3)
+- [x] 13-05-PLAN.md — Human verification checkpoint (Wave 4) — skipped
 
 ---
 
