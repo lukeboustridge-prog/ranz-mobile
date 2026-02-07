@@ -88,6 +88,9 @@ Phase 14 decisions:
 - [ui-06] Pending photos use placeholder UI (ImageOff icon) instead of broken images
 
 Phase 15 decisions:
+- [eas-01] autoIncrement must be boolean (true), not string 'buildNumber'
+- [eas-02] appVersionSource set to 'remote' for EAS-managed versions
+- [eas-03] Development uses APK + simulator, production uses app-bundle + store
 - [env-01] Sentry DSN null in development, enabled only in preview/production
 - [env-02] __DEV__ global used as fallback when EXPO_PUBLIC_APP_ENV not set
 - [env-03] Logging enabled in development and preview, disabled in production
@@ -112,8 +115,8 @@ Phase 15 decisions:
 
 ## Session Continuity
 
-Last session: 2026-02-07T03:17Z
-Stopped at: Completed 15-02-PLAN.md
+Last session: 2026-02-07T04:00Z
+Stopped at: Completed 15-01-PLAN.md (resumed after EAS auth gate)
 Resume file: None
 
 ## Next Steps
