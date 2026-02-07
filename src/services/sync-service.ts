@@ -866,6 +866,24 @@ class SyncEngine {
         const publicUrl = uploadUrl.split("?")[0];
         await updatePhotoSyncStatus(photoId, "synced", publicUrl);
         console.log(`[Sync] Photo ${photoId} uploaded successfully`);
+
+        // Log chain of custody SYNCED event
+        try {
+          const { userId, userName } = await this.getCurrentUser();
+          await logCustodySync(
+            "photo",
+            photoId,
+            userId,
+            userName,
+            photo.originalHash || "",
+            publicUrl
+          );
+          console.log(`[Sync] Logged SYNCED custody event for photo ${photoId}`);
+        } catch (custodyError) {
+          // Don't fail the upload if custody logging fails, just warn
+          console.warn(`[Sync] Failed to log custody event for photo ${photoId}:`, custodyError);
+        }
+
         return true;
       } else {
         console.error(`[Sync] Photo upload failed with status ${uploadResult.status}`);
@@ -923,6 +941,23 @@ class SyncEngine {
 
         if (result.success && result.url) {
           await updateVideoSyncStatus(video.id, "synced", result.url);
+
+          // Log chain of custody SYNCED event
+          try {
+            const { userId, userName } = await this.getCurrentUser();
+            await logCustodySync(
+              "video",
+              video.id,
+              userId,
+              userName,
+              video.originalHash || "",
+              result.url
+            );
+            console.log(`[Sync] Logged SYNCED custody event for video ${video.id}`);
+          } catch (custodyError) {
+            console.warn(`[Sync] Failed to log custody event for video ${video.id}:`, custodyError);
+          }
+
           return true;
         } else {
           await updateVideoSyncStatus(video.id, "error", undefined, result.error || "Upload failed");
@@ -959,6 +994,23 @@ class SyncEngine {
 
         if (uploadResult.status >= 200 && uploadResult.status < 300) {
           await updateVideoSyncStatus(video.id, "synced", presignedResponse.data.publicUrl);
+
+          // Log chain of custody SYNCED event
+          try {
+            const { userId, userName } = await this.getCurrentUser();
+            await logCustodySync(
+              "video",
+              video.id,
+              userId,
+              userName,
+              video.originalHash || "",
+              presignedResponse.data.publicUrl
+            );
+            console.log(`[Sync] Logged SYNCED custody event for video ${video.id}`);
+          } catch (custodyError) {
+            console.warn(`[Sync] Failed to log custody event for video ${video.id}:`, custodyError);
+          }
+
           return true;
         } else {
           throw new Error(`Upload failed with status ${uploadResult.status}`);
@@ -1022,6 +1074,23 @@ class SyncEngine {
       if (uploadResult.status >= 200 && uploadResult.status < 300) {
         await updateVoiceNoteSyncStatus(voiceNote.id, "synced", presignedResponse.data.publicUrl);
         console.log(`[Sync] Voice note ${voiceNote.id} uploaded successfully`);
+
+        // Log chain of custody SYNCED event
+        try {
+          const { userId, userName } = await this.getCurrentUser();
+          await logCustodySync(
+            "voice_note",
+            voiceNote.id,
+            userId,
+            userName,
+            voiceNote.originalHash || "",
+            presignedResponse.data.publicUrl
+          );
+          console.log(`[Sync] Logged SYNCED custody event for voice note ${voiceNote.id}`);
+        } catch (custodyError) {
+          console.warn(`[Sync] Failed to log custody event for voice note ${voiceNote.id}:`, custodyError);
+        }
+
         return true;
       } else {
         throw new Error(`Upload failed with status ${uploadResult.status}`);
