@@ -10,9 +10,9 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 14 of 15 (Report Integration) — IN PROGRESS
-Plan: 3 of 5 complete
+Plan: 4 of 5 complete
 Status: In progress
-Last activity: 2026-02-07 — Completed 14-03-PLAN.md
+Last activity: 2026-02-07 — Completed 14-04-PLAN.md
 
 Progress: [####                                              ] 8%
 
@@ -83,6 +83,9 @@ Phase 14 decisions:
 - [pp-01] photo-processing module exports reusable utilities for any photo endpoint
 - [pp-02] processPhotoForStorage combines hash, thumbnail, metadata in single pass
 - [pp-03] Hash comparison case-insensitive for cross-platform robustness
+- [ui-04] Use Popover instead of Tooltip for sync status descriptions (no radix tooltip)
+- [ui-05] Hash verification indicator only shown for synced photos
+- [ui-06] Pending photos use placeholder UI (ImageOff icon) instead of broken images
 
 ### Blockers/Concerns
 
@@ -96,17 +99,17 @@ Phase 14 decisions:
 | 1 | 14-01 | Web API endpoints for upload confirmation + custody sync | complete |
 | 2 | 14-02 | Mobile sync-service update to call confirmation after upload | complete |
 | 2 | 14-03 | Hash verification and thumbnail generation server-side | complete |
-| 3 | 14-04 | Web report builder UI for sync status | not started |
+| 3 | 14-04 | Web report builder UI for sync status | complete |
 | 4 | 14-05 | Human verification checkpoint | not started |
 
 ## Session Continuity
 
-Last session: 2026-02-07 15:40
-Stopped at: Completed 14-03-PLAN.md
+Last session: 2026-02-07 14:46
+Stopped at: Completed 14-04-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-Continue Phase 14 execution: `/gsd:execute-plan 14-04`
+Continue Phase 14 execution: `/gsd:execute-plan 14-05`
 
 Note: Phase 13 verification was skipped. Run `/gsd:verify-work 13` before production deployment.
