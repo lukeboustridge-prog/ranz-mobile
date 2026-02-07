@@ -1652,6 +1652,7 @@ export async function getAuditLog(entityTypeFilter?: string | null): Promise<Loc
     userName: row.user_name as string,
     details: row.details as string | null,
     createdAt: row.created_at as string,
+    syncedToServer: (row.synced_to_server as number) === 1,
   }));
 }
 
@@ -1678,6 +1679,7 @@ export async function getAuditLogForEntity(
     userName: row.user_name as string,
     details: row.details as string | null,
     createdAt: row.created_at as string,
+    syncedToServer: (row.synced_to_server as number) === 1,
   }));
 }
 
@@ -1702,6 +1704,7 @@ export async function getRecentAuditLogs(limit: number = 50): Promise<LocalAudit
     userName: row.user_name as string,
     details: row.details as string | null,
     createdAt: row.created_at as string,
+    syncedToServer: (row.synced_to_server as number) === 1,
   }));
 }
 
@@ -1728,6 +1731,7 @@ export async function getAuditLogsByAction(
     userName: row.user_name as string,
     details: row.details as string | null,
     createdAt: row.created_at as string,
+    syncedToServer: (row.synced_to_server as number) === 1,
   }));
 }
 
@@ -1755,4 +1759,57 @@ export async function getAuditLogCountForEntity(
     [entityType, entityId]
   );
   return result?.count ?? 0;
+}
+
+// ============================================
+// CUSTODY EVENT SYNC OPERATIONS
+// ============================================
+
+/**
+ * Get unsynced custody events for batch upload to web server
+ * Returns custody events (CAPTURED, HASHED, STORED, SYNCED, etc.) that haven't been synced
+ * Limited to 100 events per batch for performance
+ */
+export async function getUnsyncedCustodyEvents(): Promise<LocalAuditLog[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM audit_log
+     WHERE synced_to_server = 0
+       AND action IN ('CAPTURED', 'HASHED', 'STORED', 'SYNCED', 'VERIFIED', 'ANNOTATED', 'INTEGRITY_CHECK')
+     ORDER BY created_at ASC
+     LIMIT 100`
+  );
+
+  return results.map((row) => ({
+    id: row.id as string,
+    action: row.action as string,
+    entityType: row.entity_type as string,
+    entityId: row.entity_id as string,
+    userId: row.user_id as string,
+    userName: row.user_name as string,
+    details: row.details as string | null,
+    createdAt: row.created_at as string,
+    syncedToServer: (row.synced_to_server as number) === 1,
+  }));
+}
+
+/**
+ * Mark custody events as synced to web server
+ * Called after successful POST to /api/sync/custody-events
+ * @param eventIds - Array of audit log IDs to mark as synced
+ */
+export async function markCustodyEventsSynced(eventIds: string[]): Promise<void> {
+  if (eventIds.length === 0) return;
+
+  const database = getDatabase();
+
+  // Build placeholders for IN clause
+  const placeholders = eventIds.map(() => '?').join(', ');
+
+  await database.runAsync(
+    `UPDATE audit_log SET synced_to_server = 1 WHERE id IN (${placeholders})`,
+    eventIds
+  );
+
+  console.log(`[SQLite] Marked ${eventIds.length} custody events as synced`);
 }

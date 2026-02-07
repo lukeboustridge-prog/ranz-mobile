@@ -333,6 +333,7 @@ export interface LocalAuditLog {
   userName: string;
   details: string | null;
   createdAt: string;
+  syncedToServer: boolean;
 }
 
 // ============================================
@@ -340,7 +341,7 @@ export interface LocalAuditLog {
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 11; // Incremented for schema changes (v11: added idempotency_key to sync_queue)
+export const DATABASE_VERSION = 12; // Incremented for schema changes (v12: added synced_to_server to audit_log)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -869,6 +870,16 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       UPDATE sync_queue SET idempotency_key = entity_type || ':' || entity_id || ':' || operation || ':' || CAST(strftime('%s', created_at) AS TEXT) || '000' WHERE idempotency_key IS NULL;
       -- Create unique index for fast duplicate detection
       CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_idempotency ON sync_queue(idempotency_key);
+    `,
+  },
+  {
+    version: 12,
+    sql: `
+      -- Migration from v11 to v12: Add synced_to_server column to audit_log
+      -- This tracks which custody events have been synced to the web server
+      -- Required for court-admissible evidence trail
+      ALTER TABLE audit_log ADD COLUMN synced_to_server INTEGER DEFAULT 0;
+      CREATE INDEX IF NOT EXISTS idx_audit_log_synced ON audit_log(synced_to_server);
     `,
   },
 ];
