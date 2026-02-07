@@ -18,6 +18,8 @@
 
 import * as Crypto from "expo-crypto";
 import { readFileAsBase64, getFileInfo } from "../lib/file-storage";
+import { getUser } from "../lib/sqlite";
+import { logVerification } from "./chain-of-custody";
 import type { HashResult, VerificationResult } from "../types/evidence";
 
 /**
@@ -221,3 +223,74 @@ export class EvidenceService {
 
 // Export singleton for convenience
 export const evidenceService = EvidenceService.getInstance();
+
+/**
+ * Verify evidence integrity after sync
+ * Compares current file hash against originalHash stored at capture time
+ *
+ * This function is called after successful sync to ensure evidence
+ * was not corrupted during the upload process. Results are logged
+ * to the chain of custody audit trail.
+ *
+ * @param entityType - Type of evidence (photo, video, voice_note)
+ * @param entityId - ID of the evidence
+ * @param originalHash - Hash computed at capture time
+ * @param fileUri - Local URI of the original file (in originals/ directory)
+ * @returns Verification result with isValid flag
+ */
+export async function verifySyncedEvidence(
+  entityType: 'photo' | 'video' | 'voice_note',
+  entityId: string,
+  originalHash: string,
+  fileUri: string
+): Promise<{ isValid: boolean; currentHash: string; error?: string }> {
+  try {
+    // Re-compute hash of the original file
+    const hashResult = await generateFileHash(fileUri);
+    const currentHash = hashResult.hash;
+
+    // Compare with original
+    const isValid = currentHash === originalHash;
+
+    // Log verification result to chain of custody
+    try {
+      const user = await getUser();
+      const userId = user?.id ?? 'system';
+      const userName = user?.name ?? 'System Verification';
+
+      await logVerification(
+        entityType,
+        entityId,
+        userId,
+        userName,
+        isValid,
+        originalHash,
+        currentHash
+      );
+    } catch (logError) {
+      console.warn(`[Evidence] Failed to log verification for ${entityId}:`, logError);
+    }
+
+    if (!isValid) {
+      console.error(
+        `[Evidence] INTEGRITY FAILURE: ${entityType} ${entityId} ` +
+        `expected ${originalHash.substring(0, 8)}..., got ${currentHash.substring(0, 8)}...`
+      );
+    }
+
+    return {
+      isValid,
+      currentHash,
+      error: isValid ? undefined : 'Hash mismatch - file may have been modified',
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Verification failed';
+    console.error(`[Evidence] Verification error for ${entityType} ${entityId}:`, error);
+
+    return {
+      isValid: false,
+      currentHash: '',
+      error: errorMessage,
+    };
+  }
+}
