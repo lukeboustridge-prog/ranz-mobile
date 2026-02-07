@@ -27,3 +27,13 @@ export type {
   PermissionState,
   UsePermissionsReturn,
 } from "./usePermissions";
+
+// Photo Gallery
+export { usePhotoGallery } from "./usePhotoGallery";
+export type {
+  PhotoFilters,
+  PhotoSection,
+  GroupBy,
+  SortOrder,
+  UsePhotoGalleryReturn,
+} from "./usePhotoGallery";
