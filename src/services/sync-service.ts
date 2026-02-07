@@ -46,6 +46,8 @@ import {
   getRetryableItems,
   markPermanentlyFailed,
   MAX_SYNC_RETRY_ATTEMPTS,
+  getUnsyncedCustodyEvents,
+  markCustodyEventsSynced,
 } from "../lib/sqlite";
 import { saveLastSyncAt, getLastSyncAt, getOrCreateDeviceId, getSyncSettings } from "../lib/storage";
 import type {
@@ -666,6 +668,14 @@ class SyncEngine {
         }
       }
 
+      // Sync custody events to web server (non-blocking)
+      // Required for court-admissible evidence trail
+      this.emitProgress("Syncing custody events...", 94);
+      const custodyResult = await this.syncCustodyEvents();
+      if (custodyResult.synced > 0) {
+        console.log(`[Sync] Synced ${custodyResult.synced} custody events`);
+      }
+
       this.emitProgress("Upload complete", 95);
       this.emitDetailedProgress({
         status: "Upload complete",
@@ -911,6 +921,10 @@ class SyncEngine {
         await updatePhotoSyncStatus(photoId, "synced", publicUrl);
         console.log(`[Sync] Photo ${photoId} uploaded successfully`);
 
+        // Confirm upload with web server (non-blocking)
+        // This updates the photo record with publicUrl and triggers thumbnail generation
+        await this.confirmPhotoUpload(photoId, publicUrl);
+
         // Log chain of custody SYNCED event
         try {
           const { userId, userName } = await this.getCurrentUser();
@@ -964,6 +978,93 @@ class SyncEngine {
         error instanceof Error ? error.message : "Upload error"
       );
       return false;
+    }
+  }
+
+  /**
+   * Confirm photo upload with web server
+   * Called after successful presigned URL upload to update server-side photo record
+   * with public URL and trigger thumbnail generation
+   * Non-blocking: failures are logged but don't stop sync
+   */
+  private async confirmPhotoUpload(photoId: string, publicUrl: string): Promise<boolean> {
+    try {
+      const response = await apiClient.post<{ success: boolean; thumbnailUrl?: string }>(
+        `/api/photos/${photoId}/confirm-upload`,
+        { publicUrl }
+      );
+
+      if (response.data.success) {
+        console.log(`[Sync] Photo ${photoId} upload confirmed with server`);
+        return true;
+      } else {
+        console.warn(`[Sync] Photo ${photoId} confirmation returned success=false`);
+        return false;
+      }
+    } catch (error) {
+      // Non-blocking: log error but don't fail the sync
+      console.warn(
+        `[Sync] Failed to confirm photo upload for ${photoId}:`,
+        error instanceof Error ? error.message : error
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Sync custody events to web server
+   * Sends batched custody events for court-admissible evidence trail
+   * Non-blocking: failures are logged but don't stop sync
+   */
+  private async syncCustodyEvents(): Promise<{ synced: number; failed: number }> {
+    try {
+      const unsyncedEvents = await getUnsyncedCustodyEvents();
+
+      if (unsyncedEvents.length === 0) {
+        console.log('[Sync] No custody events to sync');
+        return { synced: 0, failed: 0 };
+      }
+
+      console.log(`[Sync] Syncing ${unsyncedEvents.length} custody events`);
+
+      // Transform to server format
+      const events = unsyncedEvents.map((event) => ({
+        id: event.id,
+        action: event.action,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        userId: event.userId,
+        userName: event.userName,
+        details: event.details,
+        createdAt: event.createdAt,
+      }));
+
+      const response = await apiClient.post<{
+        success: boolean;
+        processed: number;
+        skipped: number;
+      }>('/api/sync/custody-events', { events });
+
+      if (response.data.success) {
+        // Mark all events as synced
+        const eventIds = unsyncedEvents.map((e) => e.id);
+        await markCustodyEventsSynced(eventIds);
+
+        console.log(
+          `[Sync] Custody events synced: ${response.data.processed} processed, ${response.data.skipped} skipped`
+        );
+        return { synced: response.data.processed, failed: 0 };
+      } else {
+        console.warn('[Sync] Custody events sync returned success=false');
+        return { synced: 0, failed: unsyncedEvents.length };
+      }
+    } catch (error) {
+      // Non-blocking: log error but don't fail the sync
+      console.warn(
+        '[Sync] Failed to sync custody events:',
+        error instanceof Error ? error.message : error
+      );
+      return { synced: 0, failed: 1 };
     }
   }
 
