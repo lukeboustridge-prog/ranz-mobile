@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@clerk/clerk-expo": "^2.19.19",
+    "@likashefqet/react-native-image-zoom": "^4.3.0",
     "@react-native-community/netinfo": "11.4.1",
     "axios": "^1.13.2",
     "expo": "~54.0.32",
@@ -20,6 +21,7 @@
     "expo-crypto": "^15.0.8",
     "expo-device": "^8.0.10",
     "expo-file-system": "^19.0.21",
+    "expo-image-manipulator": "~14.0.8",
     "expo-local-authentication": "~17.0.8",
     "expo-location": "^19.0.8",
     "expo-network": "^8.0.8",
