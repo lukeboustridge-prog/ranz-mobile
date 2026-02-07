@@ -246,6 +246,7 @@ export interface LocalSyncQueue {
   createdAt: string;
   attemptCount: number;
   lastError: string | null;
+  idempotencyKey: string; // Unique key for deduplication: {entityType}:{entityId}:{operation}:{timestampMs}
 }
 
 export interface LocalSyncState {
@@ -339,7 +340,7 @@ export interface LocalAuditLog {
 // ============================================
 
 export const DATABASE_NAME = "ranz_mobile.db";
-export const DATABASE_VERSION = 10; // Incremented for schema changes (v10: added voice note evidence integrity)
+export const DATABASE_VERSION = 11; // Incremented for schema changes (v11: added idempotency_key to sync_queue)
 
 export const CREATE_TABLES_SQL = `
 -- Sync State (singleton table for tracking sync metadata)
@@ -649,10 +650,13 @@ CREATE TABLE IF NOT EXISTS templates (
 );
 
 -- Sync Queue (tracks what needs uploading)
+-- Migration: Added idempotency_key column for deduplication
+-- Key format: {entity_type}:{entity_id}:{operation}:{timestamp_ms}
 CREATE TABLE IF NOT EXISTS sync_queue (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   entity_type TEXT NOT NULL,
   entity_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
   operation TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -692,6 +696,7 @@ CREATE INDEX IF NOT EXISTS idx_compliance_report_id ON compliance_assessments(re
 
 CREATE INDEX IF NOT EXISTS idx_sync_queue_entity ON sync_queue(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_created ON sync_queue(created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_idempotency ON sync_queue(idempotency_key);
 
 CREATE INDEX IF NOT EXISTS idx_checklists_standard ON checklists(standard);
 CREATE INDEX IF NOT EXISTS idx_checklists_category ON checklists(category);
@@ -852,6 +857,18 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     sql: `
       -- Migration from v9 to v10: Add voice note evidence integrity column
       ALTER TABLE voice_notes ADD COLUMN original_hash TEXT;
+    `,
+  },
+  {
+    version: 11,
+    sql: `
+      -- Migration from v10 to v11: Add idempotency_key column to sync_queue
+      -- This prevents duplicate uploads during retries
+      ALTER TABLE sync_queue ADD COLUMN idempotency_key TEXT;
+      -- Backfill existing rows with generated keys based on existing data
+      UPDATE sync_queue SET idempotency_key = entity_type || ':' || entity_id || ':' || operation || ':' || CAST(strftime('%s', created_at) AS TEXT) || '000' WHERE idempotency_key IS NULL;
+      -- Create unique index for fast duplicate detection
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_idempotency ON sync_queue(idempotency_key);
     `,
   },
 ];
