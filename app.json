@@ -69,7 +69,6 @@
           "faceIDPermission": "Allow RANZ to use Face ID for quick unlock"
         }
       ],
-      "expo-background-task",
       "expo-web-browser"
     ],
     "experiments": {
