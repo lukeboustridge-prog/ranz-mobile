@@ -38,6 +38,7 @@ export { VoiceNoteRecorder } from "./VoiceNoteRecorder";
 export { PhotoAnnotator } from "./PhotoAnnotator";
 export type { Annotation, AnnotationTool, Point } from "./PhotoAnnotator";
 export { PhotoAnnotationScreen } from "./PhotoAnnotationScreen";
+export { PhotoAnnotationFlow } from "./PhotoAnnotationFlow";
 
 // Photo Viewer
 export { PhotoFullScreenViewer } from "./PhotoFullScreenViewer";
