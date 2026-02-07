@@ -5,20 +5,23 @@
 
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from "axios";
 import { getAuthToken } from "./storage";
+import { config, envLog, envWarn } from "../config/environment";
 import type { ApiResponse, BootstrapResponse, Report, ReportSummary } from "../types/shared";
 
-// API Configuration
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3000";
+// API Configuration - uses centralized environment config
 const API_TIMEOUT = 30000; // 30 seconds
 
-// Create axios instance
+// Create axios instance with environment-aware base URL
 const apiClient: AxiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: config.apiUrl,
   timeout: API_TIMEOUT,
   headers: {
     "Content-Type": "application/json",
   },
 });
+
+// Log API configuration on initialization (only in development/preview)
+envLog(`API client initialized with baseURL: ${config.apiUrl}`);
 
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
@@ -40,7 +43,7 @@ apiClient.interceptors.response.use(
   (error: AxiosError) => {
     if (error.response?.status === 401) {
       // Token expired or invalid - trigger re-auth
-      console.log("[API] Unauthorized - token may be expired");
+      envWarn("Unauthorized - token may be expired");
     }
     return Promise.reject(error);
   }
@@ -324,7 +327,7 @@ export async function withRetry<T>(
 
       if (attempt < maxRetries - 1) {
         const delay = baseDelay * Math.pow(2, attempt);
-        console.log(`[API] Retry attempt ${attempt + 1} after ${delay}ms`);
+        envLog(`Retry attempt ${attempt + 1} after ${delay}ms`);
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }

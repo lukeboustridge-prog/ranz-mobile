@@ -5,6 +5,9 @@
  * Reads EXPO_PUBLIC_APP_ENV to determine current environment.
  */
 
+// React Native __DEV__ global (provided by Metro bundler)
+declare const __DEV__: boolean;
+
 // Environment types
 export type Environment = "development" | "preview" | "production";
 
