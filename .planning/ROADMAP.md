@@ -49,8 +49,35 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 
 ### Phase 12: Photo Management
 **Goal:** Inspector can view, organize, annotate, and tag captured photos
-**Status:** Not started
+**Status:** Planned
 **Dependencies:** Phase 11 (camera capture)
+
+**Requirements:**
+- GALL-01: Photos display with thumbnails for efficient gallery scrolling
+- GALL-02: Photos can be grouped by date, element, tag, or defect
+- GALL-03: Photos can be filtered by type, tag, element, or annotation status
+- VIEW-01: Full-screen viewer with pinch-to-zoom (1x-5x scale)
+- VIEW-02: Swipe navigation between photos in full-screen view
+- VIEW-03: Photo metadata displayed in viewer overlay
+- ANNO-01: Annotation workflow accessible from gallery
+- ANNO-02: Annotated photos show indicator in gallery
+- ANNO-03: Original evidence preserved when annotating
+
+**Success Criteria:**
+1. Gallery displays photos with 200px thumbnails for smooth scrolling
+2. Group tabs switch between date/element/tag/defect organization
+3. Filter sheet allows narrowing by photo type, tag, annotations
+4. Full-screen viewer supports pinch-zoom, double-tap zoom, swipe navigation
+5. Annotation workflow saves to annotation-service, preserving originals
+6. Photo count and filter status shown in gallery header
+
+**Plans:** 6 plans in 4 waves
+- [ ] 12-01-PLAN.md — Thumbnail service and dependencies (Wave 1)
+- [ ] 12-02-PLAN.md — Photo gallery hook with filtering/grouping (Wave 1)
+- [ ] 12-03-PLAN.md — Full-screen viewer with zoom (Wave 2)
+- [ ] 12-04-PLAN.md — Photo gallery screen with organization UI (Wave 2)
+- [ ] 12-05-PLAN.md — Enhanced annotation workflow (Wave 3)
+- [ ] 12-06-PLAN.md — Human verification checkpoint (Wave 4)
 
 ---
 
