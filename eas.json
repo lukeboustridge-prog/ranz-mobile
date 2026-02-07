@@ -33,7 +33,7 @@
       "channel": "preview"
     },
     "production": {
-      "autoIncrement": "buildNumber",
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },
