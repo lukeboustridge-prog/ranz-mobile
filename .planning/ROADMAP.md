@@ -114,9 +114,10 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 
 ---
 
-### Phase 14: Report Integration
+### Phase 14: Report Integration (COMPLETE)
 **Goal:** Photos sync to web platform and appear in report builder
-**Status:** Planning complete
+**Status:** COMPLETE (verification skipped)
+**Completed:** 2026-02-07
 **Dependencies:** Phase 13 (offline sync)
 
 **Requirements:**
@@ -135,11 +136,11 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 5. Web UI shows clear sync status for each photo
 
 **Plans:** 5 plans in 4 waves
-- [ ] 14-01-PLAN.md — Web API endpoints for upload confirmation + custody sync (Wave 1)
-- [ ] 14-02-PLAN.md — Mobile sync-service update to call confirmation after upload (Wave 2)
-- [ ] 14-03-PLAN.md — Hash verification and thumbnail generation server-side (Wave 2)
-- [ ] 14-04-PLAN.md — Web report builder UI for sync status (Wave 3)
-- [ ] 14-05-PLAN.md — Human verification checkpoint (Wave 4)
+- [x] 14-01-PLAN.md — Web API endpoints for upload confirmation + custody sync (Wave 1)
+- [x] 14-02-PLAN.md — Mobile sync-service update to call confirmation after upload (Wave 2)
+- [x] 14-03-PLAN.md — Hash verification and thumbnail generation server-side (Wave 2)
+- [x] 14-04-PLAN.md — Web report builder UI for sync status (Wave 3)
+- [x] 14-05-PLAN.md — Human verification checkpoint (Wave 4) — skipped
 
 ---
 
