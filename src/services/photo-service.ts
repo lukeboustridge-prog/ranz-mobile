@@ -38,6 +38,7 @@ import {
 import { generateHashFromBase64, verifyFileHash } from "./evidence-service";
 import { logCapture, logStorage, logVerification, logCustodyEvent } from "./chain-of-custody";
 import { getPhotoMimeType, isAcceptableFormat, logFormatInfo } from "../lib/heic-utils";
+import { generateThumbnail, deleteThumbnail } from "./thumbnail-service";
 import type { LocalPhoto } from "../types/database";
 import type { PhotoType, QuickTag } from "../types/shared";
 import { getInfoAsync as getFileInfo } from "expo-file-system/legacy";
@@ -360,6 +361,28 @@ class PhotoService {
       const fileSize = (fileInfo as { size?: number }).size || 0;
 
       // =========================================
+      // THUMBNAIL: Generate for efficient grid display
+      // =========================================
+      this.emitProgress("Generating thumbnail...");
+
+      let thumbnailUri: string | null = null;
+      try {
+        // Generate thumbnail - non-blocking, failure does not block photo capture
+        const thumbnailPath = await generateThumbnail(localUri, id);
+        // Only set thumbnailUri if we got a real thumbnail (not the source fallback)
+        if (thumbnailPath !== localUri) {
+          thumbnailUri = thumbnailPath;
+          photoLogger.debug("Thumbnail generated", { photoId: id, thumbnailPath });
+        }
+      } catch (thumbnailError) {
+        // Non-fatal: photo capture continues without thumbnail
+        photoLogger.warn("Thumbnail generation failed", {
+          photoId: id,
+          error: thumbnailError instanceof Error ? thumbnailError.message : "Unknown error",
+        });
+      }
+
+      // =========================================
       // CHAIN OF CUSTODY: Log evidence events
       // =========================================
       this.emitProgress("Logging custody chain...");
@@ -444,7 +467,7 @@ class PhotoService {
         defectId: defectId ?? null,
         roofElementId: roofElementId ?? null,
         localUri,
-        thumbnailUri: null, // TODO: Generate thumbnail
+        thumbnailUri,
         filename,
         originalFilename,
         mimeType: detectedMimeType,
@@ -580,13 +603,8 @@ class PhotoService {
         }
       }
 
-      // Delete thumbnail if exists
-      if (photo.thumbnailUri) {
-        const thumbInfo = await getFileInfo(photo.thumbnailUri);
-        if (thumbInfo.exists) {
-          await deleteAsync(photo.thumbnailUri, { idempotent: true });
-        }
-      }
+      // Delete thumbnail using thumbnail service
+      await deleteThumbnail(photoId);
 
       // Delete annotated version if exists
       if (photo.annotatedUri) {

@@ -42,5 +42,13 @@ export {
   getGPSAccuracyStatus,
 } from "./photo-service";
 
+// Thumbnail service
+export {
+  generateThumbnail,
+  deleteThumbnail,
+  regenerateThumbnails,
+  getThumbnailPath,
+} from "./thumbnail-service";
+
 // Re-export types for convenience
 export type { PhotoMetadata, CaptureResult, LocationData } from "./photo-service";
