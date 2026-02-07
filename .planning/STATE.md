@@ -10,11 +10,11 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 12 of 15 (Photo Management) — IN PROGRESS
-Plan: 4 of X complete (12-01, 12-02, 12-03, 12-04)
+Plan: 5 of X complete (12-01, 12-02, 12-03, 12-04, 12-05)
 Status: In progress
-Last activity: 2026-02-07 — Completed 12-04-PLAN.md (photo gallery screen)
+Last activity: 2026-02-07 — Completed 12-05-PLAN.md (enhanced annotation workflow)
 
-Progress: [████████████████████████████████████████░░░░░░░░░░] 80%
+Progress: [████████████████████████████████████████░░░░░░░░░░] 82%
 
 ## Accumulated Context
 
@@ -54,6 +54,10 @@ Phase 12 decisions:
 - [screen-01] Grid view uses 3 columns for optimal mobile display density
 - [screen-02] Filter modal uses presentationStyle='pageSheet' for iOS-style bottom sheet
 - [screen-03] Empty states differentiate between no photos and no filter matches
+- [ann-01] Flow states: viewing, annotating, saving, saved for clear workflow transitions
+- [ann-02] Auto-close after 1.5s on successful save for smooth UX
+- [ann-03] Evidence integrity banner shows original is preserved
+- [ann-04] View Original modal allows comparing annotated vs original photo
 
 ### Blockers/Concerns
 
@@ -68,11 +72,12 @@ Phase 12 decisions:
 | 1 | 12-02 | Photo gallery hook with filtering/grouping | complete |
 | 2 | 12-03 | Full-screen photo viewer with zoom and swipe | complete |
 | 2 | 12-04 | Photo gallery screen with organization UI | complete |
+| 3 | 12-05 | Enhanced annotation workflow integrated with gallery | complete |
 
 ## Session Continuity
 
-Last session: 2026-02-07T01:22:00Z
-Stopped at: Completed 12-04-PLAN.md (photo gallery screen)
+Last session: 2026-02-07T01:42:00Z
+Stopped at: Completed 12-05-PLAN.md (enhanced annotation workflow)
 Resume file: None
 
 ## Next Steps
