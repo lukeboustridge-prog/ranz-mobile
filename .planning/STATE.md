@@ -10,9 +10,9 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 12 of 15 (Photo Management) — IN PROGRESS
-Plan: 2 of X complete (12-01, 12-02)
+Plan: 3 of X complete (12-01, 12-02, 12-03)
 Status: In progress
-Last activity: 2026-02-07 — Completed 12-01-PLAN.md (thumbnail service)
+Last activity: 2026-02-07 — Completed 12-03-PLAN.md (full-screen photo viewer)
 
 Progress: [████████████████████████████████████████░░░░░░░░░░] 80%
 
@@ -48,6 +48,9 @@ Phase 12 decisions:
 - [gal-01] Use capturedAt falling back to createdAt for sorting/grouping dates
 - [gal-02] Parse annotationsJson to check for empty array when filtering hasAnnotations
 - [gal-03] Date grouping shows Today, Yesterday, or formatted date (e.g., 7 Feb 2026)
+- [viewer-01] ImageZoom configured with minScale=1, maxScale=5, doubleTapScale=2
+- [viewer-02] Single tap toggles overlay visibility for distraction-free viewing
+- [viewer-03] FlatList with pagingEnabled and getItemLayout for optimized gallery scrolling
 
 ### Blockers/Concerns
 
@@ -60,11 +63,12 @@ Phase 12 decisions:
 |------|------|-----------|--------|
 | 1 | 12-01 | Thumbnail service and dependencies | complete |
 | 1 | 12-02 | Photo gallery hook with filtering/grouping | complete |
+| 2 | 12-03 | Full-screen photo viewer with zoom and swipe | complete |
 
 ## Session Continuity
 
-Last session: 2026-02-07T10:08:00Z
-Stopped at: Completed 12-01-PLAN.md (thumbnail service)
+Last session: 2026-02-07T12:08:00Z
+Stopped at: Completed 12-03-PLAN.md (full-screen photo viewer)
 Resume file: None
 
 ## Next Steps

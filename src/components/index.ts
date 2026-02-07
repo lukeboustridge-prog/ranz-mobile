@@ -16,6 +16,14 @@ export type { ChipOption } from "./ChipSelector";
 export { FormSection } from "./FormSection";
 export { PhotoGrid } from "./PhotoGrid";
 
+// Photo Gallery
+export { PhotoGalleryScreen } from "./PhotoGalleryScreen";
+export type { PhotoGalleryScreenProps } from "./PhotoGalleryScreen";
+export { PhotoGalleryHeader } from "./PhotoGalleryHeader";
+export type { PhotoGalleryHeaderProps } from "./PhotoGalleryHeader";
+export { PhotoGalleryFilters } from "./PhotoGalleryFilters";
+export type { PhotoGalleryFiltersProps } from "./PhotoGalleryFilters";
+
 // Camera
 export { CameraCapture } from "./CameraCapture";
 export type { RoofElementOption } from "./CameraCapture";
