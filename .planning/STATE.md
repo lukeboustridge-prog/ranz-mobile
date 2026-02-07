@@ -10,11 +10,11 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 13 of 15 (Offline Sync)
-Plan: 2 of 5 complete
+Plan: 1 of 5 complete
 Status: In progress
-Last activity: 2026-02-07 — Completed 13-02-PLAN.md
+Last activity: 2026-02-07 — Completed 13-01-PLAN.md (Background Sync Infrastructure)
 
-Progress: [████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 40%
+Progress: [██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 20%
 
 ## Accumulated Context
 
@@ -41,11 +41,6 @@ Phase 11 decisions:
 - [perm-01] Permission refresh on app state change for seamless settings return
 - [perm-02] Combined requestAllPermissions function for streamlined permission grant flow
 
-Phase 13 decisions:
-- [custody-01] Wrap all custody logging in try/catch - failures must never block sync operations
-- [custody-02] logSync aliased to logCustodySync to avoid naming confusion in sync service
-- [custody-03] Fallback to "system" user if user context unavailable during sync
-
 Phase 12 decisions:
 - [thumb-01] Thumbnail width 200px, JPEG quality 70% for optimal grid performance
 - [thumb-02] Thumbnail generation non-blocking: failures return source URI as fallback
@@ -64,6 +59,12 @@ Phase 12 decisions:
 - [ann-03] Evidence integrity banner shows original is preserved
 - [ann-04] View Original modal allows comparing annotated vs original photo
 
+Phase 13 decisions:
+- [sync-01] expo-background-task uses minutes for minimumInterval, not seconds like expo-background-fetch
+- [sync-02] BackgroundTaskResult.Success used for no-data cases (API only has Success/Failed)
+- [sync-03] Idempotency key format: {entityType}:{entityId}:{operation}:{timestampMs}
+- [sync-04] addToSyncQueue returns boolean (true=added, false=duplicate) instead of throwing
+
 ### Blockers/Concerns
 
 - SwiftFox OIDC specification not yet available — mobile uses custom auth, SSO scaffolding ready when spec received
@@ -73,18 +74,18 @@ Phase 12 decisions:
 
 | Wave | Plan | Objective | Status |
 |------|------|-----------|--------|
-| 1 | 13-01 | Chain of custody service foundation | complete |
-| 1 | 13-02 | Sync custody events | complete |
+| 1 | 13-01 | Background sync infrastructure (expo-background-task + idempotency) | complete |
+| 1 | 13-02 | Sync custody events | pending |
 | 2 | 13-03 | Conflict resolution | pending |
-| 2 | 13-04 | Background sync | pending |
+| 2 | 13-04 | Sync service enhancements | pending |
 | 3 | 13-05 | Verification checkpoint | pending |
 
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 13-02-PLAN.md
+Stopped at: Completed 13-01-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-Continue with Plan 13-03: Conflict Resolution
+Continue with Plan 13-02: Sync Custody Events
