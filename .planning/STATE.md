@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md
 
 **Core value:** Inspectors can capture legally defensible evidence on-site that syncs seamlessly to the web platform for report completion.
-**Current focus:** v2.0 Mobile App — Phase 11: Camera + GPS Capture
+**Current focus:** v2.0 Mobile App — Phase 12: Photo Management
 
 ## Current Position
 
-Phase: 11 of 15 (Camera + GPS Capture) — COMPLETE
-Plan: 6 of 6 complete
-Status: Phase complete (verification skipped)
-Last activity: 2026-02-07 — Phase 11 execution complete
+Phase: 12 of 15 (Photo Management) — IN PROGRESS
+Plan: 2 of X complete
+Status: In progress
+Last activity: 2026-02-07 — Completed 12-02-PLAN.md
 
-Progress: [██████████████████████████████████████████████████] 100%
+Progress: [████████████████████████████████████████░░░░░░░░░░] 80%
 
 ## Accumulated Context
 
@@ -41,30 +41,29 @@ Phase 11 decisions:
 - [perm-01] Permission refresh on app state change for seamless settings return
 - [perm-02] Combined requestAllPermissions function for streamlined permission grant flow
 
+Phase 12 decisions:
+- [gal-01] Use capturedAt falling back to createdAt for sorting/grouping dates
+- [gal-02] Parse annotationsJson to check for empty array when filtering hasAnnotations
+- [gal-03] Date grouping shows Today, Yesterday, or formatted date (e.g., 7 Feb 2026)
+
 ### Blockers/Concerns
 
 - SwiftFox OIDC specification not yet available — mobile uses custom auth, SSO scaffolding ready when spec received
 - iOS location permission approval rate — need mitigation strategy for "approximate location" denials (addressed in Phase 11 with warning UI)
 
-## Phase 11 Plans
+## Phase 12 Plans
 
 | Wave | Plan | Objective | Status |
 |------|------|-----------|--------|
-| 1 | 11-01 | GPS EXIF utilities and location validation | complete |
-| 2 | 11-02 | Integrate GPS EXIF embedding in photo capture | complete |
-| 2 | 11-03 | Location validation UI in camera capture | complete |
-| 3 | 11-04 | Permission handling for iOS/Android | complete |
-| 3 | 11-05 | HEIC format handling | complete |
-| 4 | 11-06 | Human verification checkpoint | skipped |
+| 1 | 12-01 | Photo management service | pending |
+| 1 | 12-02 | Photo gallery hook with filtering/grouping | complete |
 
 ## Session Continuity
 
-Last session: 2026-02-05T08:45:00Z
-Stopped at: Completed 11-04-PLAN.md
+Last session: 2026-02-07T09:08:00Z
+Stopped at: Completed 12-02-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-Phase 11 complete. Proceed to Phase 12: `/gsd:plan-phase 12`
-
-Note: Phase 11 verification was skipped. Run `/gsd:verify-work 11` before production deployment.
+Continue Phase 12 photo management plans.
