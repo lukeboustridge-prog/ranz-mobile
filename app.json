@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "scheme": "ranz",
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -67,6 +67,14 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow RANZ to use Face ID for quick unlock"
+        }
+      ],
+      "expo-background-task",
+      [
+        "@sentry/react-native/expo",
+        {
+          "organization": "ranz",
+          "project": "ranz-mobile"
         }
       ],
       "expo-web-browser"
