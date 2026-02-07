@@ -72,3 +72,8 @@ export { PreSubmitChecklist } from "./PreSubmitChecklist";
 
 // Error Handling
 export { ErrorBoundary, ScreenErrorBoundary } from "./ErrorBoundary";
+
+// Sync Components
+export { ConflictModal } from "./ConflictModal";
+export type { SyncConflict, ConflictResolution } from "./ConflictModal";
+export { SyncStatusBar } from "./SyncStatusBar";
