@@ -1,10 +1,13 @@
 /**
  * Background Sync Service
- * Uses expo-background-fetch and expo-task-manager to sync data
+ * Uses expo-background-task and expo-task-manager to sync data
  * when the app is in the background or closed
+ *
+ * Migrated from expo-background-fetch to expo-background-task (SDK 54+)
+ * expo-background-task uses WorkManager on Android and BGTaskScheduler on iOS
  */
 
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import { Platform } from "react-native";
 import NetInfo, { NetInfoState } from "@react-native-community/netinfo";
@@ -21,9 +24,9 @@ import {
 export const BACKGROUND_SYNC_TASK = "ranz-background-sync";
 export const BACKGROUND_PHOTO_UPLOAD_TASK = "ranz-photo-upload";
 
-// Minimum interval between background fetches (in seconds)
-// iOS enforces a minimum of 15 minutes; Android can be more frequent
-const MINIMUM_INTERVAL_SECONDS = Platform.OS === "ios" ? 15 * 60 : 15 * 60;
+// Minimum interval between background tasks (in minutes)
+// iOS enforces a minimum of 15 minutes; expo-background-task uses minutes
+const MINIMUM_INTERVAL_MINUTES = 15;
 
 // ============================================
 // TYPES
@@ -31,7 +34,7 @@ const MINIMUM_INTERVAL_SECONDS = Platform.OS === "ios" ? 15 * 60 : 15 * 60;
 
 export interface BackgroundSyncStatus {
   isRegistered: boolean;
-  status: BackgroundFetch.BackgroundFetchStatus | null;
+  status: BackgroundTask.BackgroundTaskStatus | null;
   lastRunAt: string | null;
   lastResult: "success" | "failed" | "no_data" | null;
 }
@@ -66,21 +69,21 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
     const netState = await NetInfo.fetch();
     if (!netState.isConnected || netState.isInternetReachable === false) {
       logSync("skipped", "No network connection");
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return BackgroundTask.BackgroundTaskResult.Success; // Nothing to do, task completed OK
     }
 
     // Check if server is reachable
     const isOnline = await checkApiHealth();
     if (!isOnline) {
       logSync("skipped", "Server not reachable");
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return BackgroundTask.BackgroundTaskResult.Success; // Nothing to do, task completed OK
     }
 
     // Check if there's pending data to sync
     const pendingReports = await getPendingSyncReports();
     if (pendingReports.length === 0) {
       logSync("no_data", "No pending data to sync");
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return BackgroundTask.BackgroundTaskResult.Success;
     }
 
     logSync("syncing", `Found ${pendingReports.length} pending reports`);
@@ -104,19 +107,19 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
         reportsSynced: result.reportsSynced,
         photosSynced: result.photosSynced,
       });
-      return BackgroundFetch.BackgroundFetchResult.NewData;
+      return BackgroundTask.BackgroundTaskResult.Success;
     } else {
       logSync("failed", `Sync failed with ${result.errors.length} errors`, {
         duration,
         errors: result.errors.map((e) => e.message),
       });
-      return BackgroundFetch.BackgroundFetchResult.Failed;
+      return BackgroundTask.BackgroundTaskResult.Failed;
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     logSync("error", `Task error: ${errorMessage}`);
     console.error("[BackgroundSync] Task error:", error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return BackgroundTask.BackgroundTaskResult.Failed;
   }
 });
 
@@ -130,16 +133,11 @@ TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
  */
 export async function registerBackgroundSync(): Promise<boolean> {
   try {
-    // Check if background fetch is available
-    const status = await BackgroundFetch.getStatusAsync();
+    // Check if background task is available
+    const status = await BackgroundTask.getStatusAsync();
 
-    if (status === BackgroundFetch.BackgroundFetchStatus.Restricted) {
-      console.warn("[BackgroundSync] Background fetch is restricted by the system");
-      return false;
-    }
-
-    if (status === BackgroundFetch.BackgroundFetchStatus.Denied) {
-      console.warn("[BackgroundSync] Background fetch is denied - user may need to enable it in settings");
+    if (status === BackgroundTask.BackgroundTaskStatus.Restricted) {
+      console.warn("[BackgroundSync] Background task is restricted by the system");
       return false;
     }
 
@@ -151,15 +149,15 @@ export async function registerBackgroundSync(): Promise<boolean> {
     }
 
     // Register the task
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_SYNC_TASK, {
-      minimumInterval: MINIMUM_INTERVAL_SECONDS,
-      stopOnTerminate: false, // Continue running after app is closed (Android)
-      startOnBoot: true, // Start task after device reboot (Android)
+    // Note: expo-background-task uses minimumInterval in minutes, not seconds
+    // Android WorkManager and iOS BGTaskScheduler handle the scheduling internally
+    await BackgroundTask.registerTaskAsync(BACKGROUND_SYNC_TASK, {
+      minimumInterval: MINIMUM_INTERVAL_MINUTES,
     });
 
     console.log("[BackgroundSync] Task registered successfully");
     logSync("registered", "Background sync task registered", {
-      minimumInterval: MINIMUM_INTERVAL_SECONDS,
+      minimumInterval: MINIMUM_INTERVAL_MINUTES,
     });
 
     return true;
@@ -177,7 +175,7 @@ export async function unregisterBackgroundSync(): Promise<void> {
   try {
     const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
     if (isRegistered) {
-      await BackgroundFetch.unregisterTaskAsync(BACKGROUND_SYNC_TASK);
+      await BackgroundTask.unregisterTaskAsync(BACKGROUND_SYNC_TASK);
       console.log("[BackgroundSync] Task unregistered");
       logSync("unregistered", "Background sync task unregistered");
     }
@@ -196,7 +194,7 @@ export async function unregisterBackgroundSync(): Promise<void> {
 export async function getBackgroundSyncStatus(): Promise<BackgroundSyncStatus> {
   try {
     const [status, isRegistered] = await Promise.all([
-      BackgroundFetch.getStatusAsync(),
+      BackgroundTask.getStatusAsync(),
       TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK),
     ]);
 
@@ -231,14 +229,12 @@ export async function getBackgroundSyncStatus(): Promise<BackgroundSyncStatus> {
 /**
  * Get human-readable status string
  */
-export function getStatusString(status: BackgroundFetch.BackgroundFetchStatus | null): string {
+export function getStatusString(status: BackgroundTask.BackgroundTaskStatus | null): string {
   switch (status) {
-    case BackgroundFetch.BackgroundFetchStatus.Available:
+    case BackgroundTask.BackgroundTaskStatus.Available:
       return "Available";
-    case BackgroundFetch.BackgroundFetchStatus.Restricted:
+    case BackgroundTask.BackgroundTaskStatus.Restricted:
       return "Restricted by system";
-    case BackgroundFetch.BackgroundFetchStatus.Denied:
-      return "Denied by user";
     default:
       return "Unknown";
   }
@@ -266,7 +262,7 @@ export function clearSyncLogs(): void {
  * Manually trigger a background sync (for testing purposes)
  * This directly executes the sync logic that would run in the background task
  */
-export async function triggerBackgroundSync(): Promise<BackgroundFetch.BackgroundFetchResult> {
+export async function triggerBackgroundSync(): Promise<BackgroundTask.BackgroundTaskResult> {
   console.log("[BackgroundSync] Manual trigger requested");
 
   const startTime = Date.now();
@@ -278,21 +274,21 @@ export async function triggerBackgroundSync(): Promise<BackgroundFetch.Backgroun
     const netState = await NetInfo.fetch();
     if (!netState.isConnected || netState.isInternetReachable === false) {
       logSync("skipped", "No network connection");
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return BackgroundTask.BackgroundTaskResult.Success;
     }
 
     // Check if server is reachable
     const isOnline = await checkApiHealth();
     if (!isOnline) {
       logSync("skipped", "Server not reachable");
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return BackgroundTask.BackgroundTaskResult.Success;
     }
 
     // Check if there's pending data to sync
     const pendingReports = await getPendingSyncReports();
     if (pendingReports.length === 0) {
       logSync("no_data", "No pending data to sync");
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return BackgroundTask.BackgroundTaskResult.Success;
     }
 
     logSync("syncing", `Found ${pendingReports.length} pending reports`);
@@ -316,19 +312,19 @@ export async function triggerBackgroundSync(): Promise<BackgroundFetch.Backgroun
         reportsSynced: result.reportsSynced,
         photosSynced: result.photosSynced,
       });
-      return BackgroundFetch.BackgroundFetchResult.NewData;
+      return BackgroundTask.BackgroundTaskResult.Success;
     } else {
       logSync("failed", `Sync failed with ${result.errors.length} errors`, {
         duration,
         errors: result.errors.map((e) => e.message),
       });
-      return BackgroundFetch.BackgroundFetchResult.Failed;
+      return BackgroundTask.BackgroundTaskResult.Failed;
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     logSync("error", `Manual trigger error: ${errorMessage}`);
     console.error("[BackgroundSync] Manual trigger failed:", error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return BackgroundTask.BackgroundTaskResult.Failed;
   }
 }
 
@@ -363,8 +359,8 @@ function logSync(action: string, result: string, details?: Record<string, unknow
  */
 export async function isBackgroundSyncAvailable(): Promise<boolean> {
   try {
-    const status = await BackgroundFetch.getStatusAsync();
-    return status === BackgroundFetch.BackgroundFetchStatus.Available;
+    const status = await BackgroundTask.getStatusAsync();
+    return status === BackgroundTask.BackgroundTaskStatus.Available;
   } catch {
     return false;
   }
@@ -376,15 +372,28 @@ export async function isBackgroundSyncAvailable(): Promise<boolean> {
  */
 export async function requestBackgroundPermission(): Promise<boolean> {
   if (Platform.OS === "android") {
-    // Android doesn't require explicit permission for background fetch
+    // Android doesn't require explicit permission for background task
     return true;
   }
 
   try {
     // On iOS, the status reflects whether the user has enabled background refresh
-    const status = await BackgroundFetch.getStatusAsync();
-    return status === BackgroundFetch.BackgroundFetchStatus.Available;
+    const status = await BackgroundTask.getStatusAsync();
+    return status === BackgroundTask.BackgroundTaskStatus.Available;
   } catch {
+    return false;
+  }
+}
+
+/**
+ * Trigger background task for testing (only works in debug builds)
+ * Uses expo-background-task's built-in test trigger
+ */
+export async function triggerTestTask(): Promise<boolean> {
+  try {
+    return await BackgroundTask.triggerTaskWorkerForTestingAsync();
+  } catch (error) {
+    console.error("[BackgroundSync] Failed to trigger test task:", error);
     return false;
   }
 }
