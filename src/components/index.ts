@@ -31,6 +31,9 @@ export { PhotoAnnotator } from "./PhotoAnnotator";
 export type { Annotation, AnnotationTool, Point } from "./PhotoAnnotator";
 export { PhotoAnnotationScreen } from "./PhotoAnnotationScreen";
 
+// Photo Viewer
+export { PhotoFullScreenViewer } from "./PhotoFullScreenViewer";
+
 // Video Capture
 export { VideoCapture } from "./VideoCapture";
 
