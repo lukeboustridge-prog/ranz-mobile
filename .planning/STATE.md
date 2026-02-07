@@ -9,12 +9,12 @@ See: .planning/PROJECT.md
 
 ## Current Position
 
-Phase: 15 of 15 (Production Polish) — PLANNING COMPLETE
-Plan: 0 of 6 complete
-Status: Plans created, ready for execution
-Last activity: 2026-02-07 — Phase 15 planning complete
+Phase: 15 of 15 (Production Polish)
+Plan: 2 of 6 complete
+Status: In progress
+Last activity: 2026-02-07 — Completed 15-02-PLAN.md
 
-Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
+Progress: [██████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 33%
 
 ## Accumulated Context
 
@@ -87,6 +87,12 @@ Phase 14 decisions:
 - [ui-05] Hash verification indicator only shown for synced photos
 - [ui-06] Pending photos use placeholder UI (ImageOff icon) instead of broken images
 
+Phase 15 decisions:
+- [env-01] Sentry DSN null in development, enabled only in preview/production
+- [env-02] __DEV__ global used as fallback when EXPO_PUBLIC_APP_ENV not set
+- [env-03] Logging enabled in development and preview, disabled in production
+- [env-04] Environment-aware logging utilities (envLog, envWarn, envError) for controlled output
+
 ### Blockers/Concerns
 
 - SwiftFox OIDC specification not yet available — mobile uses custom auth, SSO scaffolding ready when spec received
@@ -97,8 +103,8 @@ Phase 14 decisions:
 
 | Wave | Plan | Objective | Status |
 |------|------|-----------|--------|
-| 1 | 15-01 | EAS Build configuration | not started |
-| 1 | 15-02 | Environment configuration | not started |
+| 1 | 15-01 | EAS Build configuration | complete |
+| 1 | 15-02 | Environment configuration | complete |
 | 2 | 15-03 | Sentry crash reporting integration | not started |
 | 3 | 15-04 | Jest testing infrastructure | not started |
 | 3 | 15-05 | README documentation | not started |
@@ -106,12 +112,12 @@ Phase 14 decisions:
 
 ## Session Continuity
 
-Last session: 2026-02-07
-Stopped at: Phase 15 planning complete
+Last session: 2026-02-07T03:17Z
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-Execute Phase 15: `/gsd:execute-phase 15`
+Continue Phase 15: Execute 15-03 (Sentry integration)
 
 Note: Phases 13 and 14 verification were skipped. Run `/gsd:verify-work 13` and `/gsd:verify-work 14` before production deployment.
