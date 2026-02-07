@@ -43,6 +43,9 @@ import {
   getSyncState as getDbSyncState,
   updateSyncState as updateDbSyncState,
   getReportWithRelations,
+  getRetryableItems,
+  markPermanentlyFailed,
+  MAX_SYNC_RETRY_ATTEMPTS,
 } from "../lib/sqlite";
 import { saveLastSyncAt, getLastSyncAt, getOrCreateDeviceId, getSyncSettings } from "../lib/storage";
 import type {
@@ -59,6 +62,7 @@ import type {
 } from "../types/database";
 import { uploadWithResume, shouldUseChunkedUpload } from "../lib/chunked-upload";
 import { logSync as logCustodySync } from "./chain-of-custody";
+import { verifySyncedEvidence } from "./evidence-service";
 import type {
   SyncProgress,
   SyncResult,
@@ -144,6 +148,46 @@ class SyncEngine {
     }
     // Fallback for when user not available
     return { userId: 'system', userName: 'System Sync' };
+  }
+
+  /**
+   * Calculate exponential backoff delay with jitter
+   * Used for retry delays between sync attempts
+   */
+  private calculateBackoff(attemptCount: number): number {
+    const baseDelay = 1000; // 1 second
+    const maxDelay = 60000; // 1 minute max
+    const exponentialDelay = Math.min(baseDelay * Math.pow(2, attemptCount), maxDelay);
+    const jitter = Math.random() * 500; // Up to 500ms jitter
+    return exponentialDelay + jitter;
+  }
+
+  /**
+   * Handle sync failure with retry tracking
+   * Marks items as permanently failed after exceeding max attempts
+   */
+  private async handleSyncFailure(
+    queueItemId: number | undefined,
+    entityType: string,
+    entityId: string,
+    error: string,
+    attemptCount: number
+  ): Promise<void> {
+    if (!queueItemId) return;
+
+    if (attemptCount >= MAX_SYNC_RETRY_ATTEMPTS - 1) {
+      // Mark as permanently failed
+      await markPermanentlyFailed(queueItemId, error);
+      console.warn(
+        `[Sync] ${entityType} ${entityId} marked as permanently failed after ${attemptCount + 1} attempts`
+      );
+    } else {
+      // Update attempt count for retry
+      await updateSyncQueueAttempt(queueItemId, error);
+      console.log(
+        `[Sync] ${entityType} ${entityId} will retry (attempt ${attemptCount + 1}/${MAX_SYNC_RETRY_ATTEMPTS})`
+      );
+    }
   }
 
   // ============================================
@@ -884,6 +928,27 @@ class SyncEngine {
           console.warn(`[Sync] Failed to log custody event for photo ${photoId}:`, custodyError);
         }
 
+        // Verify evidence integrity after sync
+        if (photo.originalHash) {
+          try {
+            // Use the original file URI (in originals/ directory)
+            // Photos are stored with orig_ prefix in evidence/originals/
+            const originalUri = photo.localUri.replace('/photos/', '/evidence/originals/orig_');
+            const verification = await verifySyncedEvidence(
+              'photo',
+              photoId,
+              photo.originalHash,
+              originalUri
+            );
+            if (!verification.isValid) {
+              console.error(`[Sync] Photo ${photoId} failed post-sync verification: ${verification.error}`);
+              // Note: We don't fail the sync, but the verification is logged
+            }
+          } catch (verifyError) {
+            console.warn(`[Sync] Could not verify photo ${photoId} after sync:`, verifyError);
+          }
+        }
+
         return true;
       } else {
         console.error(`[Sync] Photo upload failed with status ${uploadResult.status}`);
@@ -958,6 +1023,23 @@ class SyncEngine {
             console.warn(`[Sync] Failed to log custody event for video ${video.id}:`, custodyError);
           }
 
+          // Verify evidence integrity after sync (for videos with originalHash)
+          if (video.originalHash) {
+            try {
+              const verification = await verifySyncedEvidence(
+                'video',
+                video.id,
+                video.originalHash,
+                video.localUri
+              );
+              if (!verification.isValid) {
+                console.error(`[Sync] Video ${video.id} failed post-sync verification: ${verification.error}`);
+              }
+            } catch (verifyError) {
+              console.warn(`[Sync] Could not verify video ${video.id} after sync:`, verifyError);
+            }
+          }
+
           return true;
         } else {
           await updateVideoSyncStatus(video.id, "error", undefined, result.error || "Upload failed");
@@ -1009,6 +1091,23 @@ class SyncEngine {
             console.log(`[Sync] Logged SYNCED custody event for video ${video.id}`);
           } catch (custodyError) {
             console.warn(`[Sync] Failed to log custody event for video ${video.id}:`, custodyError);
+          }
+
+          // Verify evidence integrity after sync (for videos with originalHash)
+          if (video.originalHash) {
+            try {
+              const verification = await verifySyncedEvidence(
+                'video',
+                video.id,
+                video.originalHash,
+                video.localUri
+              );
+              if (!verification.isValid) {
+                console.error(`[Sync] Video ${video.id} failed post-sync verification: ${verification.error}`);
+              }
+            } catch (verifyError) {
+              console.warn(`[Sync] Could not verify video ${video.id} after sync:`, verifyError);
+            }
           }
 
           return true;
