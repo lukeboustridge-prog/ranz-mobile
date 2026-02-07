@@ -21,7 +21,8 @@
         "NSLocationWhenInUseUsageDescription": "RANZ needs location access to record GPS coordinates of inspection photos for evidence integrity.",
         "NSLocationAlwaysUsageDescription": "RANZ needs location access to record GPS coordinates of inspection photos for evidence integrity.",
         "NSPhotoLibraryUsageDescription": "RANZ needs photo library access to save inspection photos.",
-        "NSFaceIDUsageDescription": "Use Face ID to unlock the RANZ app"
+        "NSFaceIDUsageDescription": "Use Face ID to unlock the RANZ app",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -75,7 +76,8 @@
           "organization": "ranz",
           "project": "ranz-mobile"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
@@ -88,6 +90,12 @@
         "projectId": "c133d749-0a68-4eb5-a023-9b3d59e55be9"
       }
     },
-    "owner": "nukeitup"
+    "owner": "nukeitup",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/c133d749-0a68-4eb5-a023-9b3d59e55be9"
+    }
   }
 }
