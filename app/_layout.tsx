@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus, Text } from "react-native";
+import * as Sentry from "@sentry/react-native";
 import { initializeDatabase } from "../src/lib/sqlite";
 import { startAutoSync, stopAutoSync } from "../src/services/sync-service";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
@@ -14,11 +15,26 @@ import { appLogger, authLogger } from "../src/lib/logger";
 import { useAuthStore } from "../src/stores/auth-store";
 import { useAuthDeepLink } from "../src/lib/auth/deep-linking";
 import { canUseBiometrics } from "../src/lib/auth/biometrics";
+import { config, isDevelopment } from "../src/config/environment";
 
 // Import background sync to register the task definition
 // This must be imported at the top level so TaskManager.defineTask runs
 import "../src/services/background-sync";
 import { registerBackgroundSync, unregisterBackgroundSync } from "../src/services/background-sync";
+
+// Initialize Sentry for crash reporting (only in preview/production)
+if (config.sentryDsn && !isDevelopment()) {
+  Sentry.init({
+    dsn: config.sentryDsn,
+    environment: config.environment,
+    // Enable performance monitoring
+    tracesSampleRate: config.environment === "production" ? 0.2 : 1.0,
+    // Attach stack traces to all messages
+    attachStacktrace: true,
+    // Only send events in non-development
+    enabled: !isDevelopment(),
+  });
+}
 
 /**
  * Auth Guard Component
@@ -155,7 +171,7 @@ function DatabaseProvider({ children }: { children: React.ReactNode }) {
 /**
  * Root Layout Component
  */
-export default function RootLayout() {
+function RootLayout() {
   return (
     <ErrorBoundary>
       <DatabaseProvider>
@@ -164,6 +180,9 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+// Wrap with Sentry for error reporting in preview/production
+export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
   loadingContainer: {
