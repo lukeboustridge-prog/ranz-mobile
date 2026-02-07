@@ -8,6 +8,14 @@
 
 import * as SQLite from "expo-sqlite";
 import * as Crypto from "expo-crypto";
+
+// ============================================
+// SYNC RETRY CONSTANTS
+// ============================================
+
+export const MAX_SYNC_RETRY_ATTEMPTS = 5;
+export const PERMANENTLY_FAILED_STATUS = 'permanently_failed';
+
 import {
   DATABASE_NAME,
   DATABASE_VERSION,
@@ -1310,6 +1318,78 @@ export async function getSyncQueueCount(): Promise<number> {
 export async function clearSyncQueue(): Promise<void> {
   const database = getDatabase();
   await database.runAsync("DELETE FROM sync_queue");
+}
+
+/**
+ * Get sync queue items that are still eligible for retry
+ * Excludes items that have exceeded MAX_SYNC_RETRY_ATTEMPTS or are permanently failed
+ */
+export async function getRetryableItems(): Promise<LocalSyncQueue[]> {
+  const database = getDatabase();
+  const results = await database.getAllAsync<Record<string, unknown>>(
+    `SELECT * FROM sync_queue
+     WHERE attempt_count < ?
+       AND operation NOT LIKE ?
+     ORDER BY created_at ASC`,
+    [MAX_SYNC_RETRY_ATTEMPTS, '%:' + PERMANENTLY_FAILED_STATUS]
+  );
+
+  return results.map((row) => ({
+    id: row.id as number,
+    entityType: row.entity_type as string,
+    entityId: row.entity_id as string,
+    operation: row.operation as string,
+    payloadJson: row.payload_json as string,
+    createdAt: row.created_at as string,
+    attemptCount: row.attempt_count as number,
+    lastError: row.last_error as string | null,
+    idempotencyKey: row.idempotency_key as string,
+  }));
+}
+
+/**
+ * Mark a sync queue item as permanently failed (exceeded max retries)
+ * These items will need manual intervention to retry
+ */
+export async function markPermanentlyFailed(id: number, finalError: string): Promise<void> {
+  const database = getDatabase();
+  await database.runAsync(
+    `UPDATE sync_queue
+     SET last_error = ?,
+         operation = operation || ':' || ?
+     WHERE id = ?`,
+    [finalError, PERMANENTLY_FAILED_STATUS, id]
+  );
+}
+
+/**
+ * Get count of permanently failed sync items
+ */
+export async function getFailedSyncCount(): Promise<number> {
+  const database = getDatabase();
+  const result = await database.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM sync_queue
+     WHERE attempt_count >= ? OR operation LIKE ?`,
+    [MAX_SYNC_RETRY_ATTEMPTS, '%:' + PERMANENTLY_FAILED_STATUS]
+  );
+  return result?.count ?? 0;
+}
+
+/**
+ * Reset permanently failed items for manual retry
+ * Called when user explicitly requests retry
+ */
+export async function resetFailedItems(): Promise<number> {
+  const database = getDatabase();
+  const result = await database.runAsync(
+    `UPDATE sync_queue
+     SET attempt_count = 0,
+         last_error = NULL,
+         operation = REPLACE(operation, ':' || ?, '')
+     WHERE attempt_count >= ? OR operation LIKE ?`,
+    [PERMANENTLY_FAILED_STATUS, MAX_SYNC_RETRY_ATTEMPTS, '%:' + PERMANENTLY_FAILED_STATUS]
+  );
+  return result.changes;
 }
 
 // ============================================
