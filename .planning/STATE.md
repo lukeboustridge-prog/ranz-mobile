@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md
 
 **Core value:** Inspectors can capture legally defensible evidence on-site that syncs seamlessly to the web platform for report completion.
-**Current focus:** v2.0 Mobile App — Phase 14: Report Integration
+**Current focus:** v2.0 Mobile App — Phase 15: Production Polish
 
 ## Current Position
 
-Phase: 14 of 15 (Report Integration) — COMPLETE
-Plan: 5 of 5 complete
-Status: Phase complete (verification skipped)
-Last activity: 2026-02-07 — Phase 14 execution complete
+Phase: 15 of 15 (Production Polish) — PLANNING COMPLETE
+Plan: 0 of 6 complete
+Status: Plans created, ready for execution
+Last activity: 2026-02-07 — Phase 15 planning complete
 
-Progress: [██████████████████████████████████████████████████] 100%
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0%
 
 ## Accumulated Context
 
@@ -91,25 +91,27 @@ Phase 14 decisions:
 
 - SwiftFox OIDC specification not yet available — mobile uses custom auth, SSO scaffolding ready when spec received
 - iOS location permission approval rate — need mitigation strategy for "approximate location" denials (addressed in Phase 11 with warning UI)
+- Sentry Expo 54 compatibility — verify after installation (GitHub issue #5103 mentioned in research)
 
-## Phase 14 Plans
+## Phase 15 Plans
 
 | Wave | Plan | Objective | Status |
 |------|------|-----------|--------|
-| 1 | 14-01 | Web API endpoints for upload confirmation + custody sync | complete |
-| 2 | 14-02 | Mobile sync-service update to call confirmation after upload | complete |
-| 2 | 14-03 | Hash verification and thumbnail generation server-side | complete |
-| 3 | 14-04 | Web report builder UI for sync status | complete |
-| 4 | 14-05 | Human verification checkpoint | skipped |
+| 1 | 15-01 | EAS Build configuration | not started |
+| 1 | 15-02 | Environment configuration | not started |
+| 2 | 15-03 | Sentry crash reporting integration | not started |
+| 3 | 15-04 | Jest testing infrastructure | not started |
+| 3 | 15-05 | README documentation | not started |
+| 4 | 15-06 | Human verification checkpoint | not started |
 
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed Phase 14
+Stopped at: Phase 15 planning complete
 Resume file: None
 
 ## Next Steps
 
-Phase 14 complete. Proceed to Phase 15: `/gsd:plan-phase 15`
+Execute Phase 15: `/gsd:execute-phase 15`
 
 Note: Phases 13 and 14 verification were skipped. Run `/gsd:verify-work 13` and `/gsd:verify-work 14` before production deployment.

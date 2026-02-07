@@ -145,6 +145,30 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 ---
 
 ### Phase 15: Production Polish
-**Goal:** App ready for production deployment
-**Status:** Not started
+**Goal:** App ready for production deployment with EAS Build, Sentry monitoring, testing, and documentation
+**Status:** PLANNING COMPLETE
 **Dependencies:** Phase 14 (report integration)
+
+**Requirements:**
+- PROD-01: EAS Build configuration for development, preview, and production profiles
+- PROD-02: Environment-aware configuration (API URLs, logging, Sentry)
+- PROD-03: Sentry crash reporting for production monitoring
+- PROD-04: Automated tests for critical services
+- PROD-05: README documentation for developers
+- PROD-06: RANZ branded app icons and splash screen
+
+**Success Criteria:**
+1. `eas build --profile preview` completes successfully
+2. Sentry receives crash reports from preview builds
+3. `npm test` passes with all tests green
+4. README provides complete setup and build instructions
+5. App icons show RANZ branding (not Expo placeholder)
+6. App is ready for production build and store submission
+
+**Plans:** 6 plans in 4 waves
+- [ ] 15-01-PLAN.md — EAS Build configuration (Wave 1)
+- [ ] 15-02-PLAN.md — Environment configuration (Wave 1)
+- [ ] 15-03-PLAN.md — Sentry crash reporting integration (Wave 2)
+- [ ] 15-04-PLAN.md — Jest testing infrastructure (Wave 3)
+- [ ] 15-05-PLAN.md — README documentation (Wave 3)
+- [ ] 15-06-PLAN.md — Human verification checkpoint (Wave 4)
