@@ -70,13 +70,6 @@
         }
       ],
       "expo-background-task",
-      [
-        "@sentry/react-native/expo",
-        {
-          "organization": "ranz",
-          "project": "ranz-mobile"
-        }
-      ],
       "expo-web-browser"
     ],
     "experiments": {
