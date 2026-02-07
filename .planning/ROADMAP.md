@@ -84,8 +84,32 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 
 ### Phase 13: Offline Sync
 **Goal:** App works fully offline and syncs when connectivity restored
-**Status:** Not started
+**Status:** Planned
 **Dependencies:** Phase 11 (camera capture)
+
+**Requirements:**
+- SYNC-01: Photos sync automatically when connectivity is restored
+- SYNC-02: Background sync runs while app is closed (opportunistic)
+- SYNC-03: Idempotency keys prevent duplicate uploads on retry
+- SYNC-04: Failed uploads retry with exponential backoff (max 5 attempts)
+- SYNC-05: Chain of custody SYNCED event logged after successful upload
+- SYNC-06: Evidence hash verified after sync for integrity check
+- SYNC-07: Conflict resolution UI for concurrent edits
+- SYNC-08: Manual retry available for failed items
+
+**Success Criteria:**
+1. Photos captured offline sync automatically when device comes online
+2. Sync status bar shows pending/failed counts with retry button
+3. Failed items can be retried from UI without app restart
+4. SYNCED custody events appear in audit log with hash verification
+5. Conflict modal shows when server version differs from local
+
+**Plans:** 5 plans in 4 waves
+- [ ] 13-01-PLAN.md — Background task migration and idempotency keys (Wave 1)
+- [ ] 13-02-PLAN.md — Chain of custody SYNCED events wiring (Wave 1)
+- [ ] 13-03-PLAN.md — Retry queue with max attempts and hash verification (Wave 2)
+- [ ] 13-04-PLAN.md — Conflict resolution UI and sync status bar (Wave 3)
+- [ ] 13-05-PLAN.md — Human verification checkpoint (Wave 4)
 
 ---
 
