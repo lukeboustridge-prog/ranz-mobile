@@ -1210,18 +1210,61 @@ export async function getDefaultTemplate(): Promise<LocalTemplate | null> {
 // SYNC QUEUE OPERATIONS
 // ============================================
 
+/**
+ * Generate an idempotency key for sync queue items
+ * Format: {entityType}:{entityId}:{operation}:{timestampMs}
+ * This key ensures duplicate operations are rejected
+ */
+export function generateIdempotencyKey(
+  entityType: string,
+  entityId: string,
+  operation: string
+): string {
+  return `${entityType}:${entityId}:${operation}:${Date.now()}`;
+}
+
+/**
+ * Check if an idempotency key already exists in the queue
+ * Used to prevent duplicate sync queue entries
+ */
+export async function checkIdempotencyKey(idempotencyKey: string): Promise<boolean> {
+  const database = getDatabase();
+  const result = await database.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM sync_queue WHERE idempotency_key = ?",
+    [idempotencyKey]
+  );
+  return (result?.count ?? 0) > 0;
+}
+
+/**
+ * Add an item to the sync queue with idempotency protection
+ * Returns true if item was added, false if duplicate (silently rejected)
+ */
 export async function addToSyncQueue(
   entityType: string,
   entityId: string,
   operation: string,
-  payload: Record<string, unknown>
-): Promise<void> {
+  payload: Record<string, unknown>,
+  idempotencyKey?: string
+): Promise<boolean> {
+  const key = idempotencyKey || generateIdempotencyKey(entityType, entityId, operation);
   const database = getDatabase();
-  await database.runAsync(
-    `INSERT INTO sync_queue (entity_type, entity_id, operation, payload_json, created_at, attempt_count)
-     VALUES (?, ?, ?, ?, ?, 0)`,
-    [entityType, entityId, operation, JSON.stringify(payload), new Date().toISOString()]
-  );
+
+  try {
+    await database.runAsync(
+      `INSERT INTO sync_queue (entity_type, entity_id, idempotency_key, operation, payload_json, created_at, attempt_count)
+       VALUES (?, ?, ?, ?, ?, ?, 0)`,
+      [entityType, entityId, key, operation, JSON.stringify(payload), new Date().toISOString()]
+    );
+    return true;
+  } catch (error) {
+    // UNIQUE constraint violation = duplicate key = skip silently
+    if (error instanceof Error && error.message.includes('UNIQUE constraint')) {
+      console.log(`[SQLite] Duplicate sync queue item skipped: ${key}`);
+      return false;
+    }
+    throw error;
+  }
 }
 
 export async function getSyncQueue(): Promise<LocalSyncQueue[]> {
@@ -1239,6 +1282,7 @@ export async function getSyncQueue(): Promise<LocalSyncQueue[]> {
     createdAt: row.created_at as string,
     attemptCount: row.attempt_count as number,
     lastError: row.last_error as string | null,
+    idempotencyKey: row.idempotency_key as string,
   }));
 }
 
