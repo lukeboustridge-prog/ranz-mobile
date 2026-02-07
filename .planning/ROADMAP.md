@@ -116,8 +116,30 @@ This roadmap covers the mobile app component of the RANZ Roofing Report platform
 
 ### Phase 14: Report Integration
 **Goal:** Photos sync to web platform and appear in report builder
-**Status:** Not started
+**Status:** Planning complete
 **Dependencies:** Phase 13 (offline sync)
+
+**Requirements:**
+- INTG-01: Photo URL updated on server after presigned URL upload
+- INTG-02: Server-side thumbnail generation after upload confirmation
+- INTG-03: Chain of custody events synced to web audit log
+- INTG-04: Hash verification on server matches mobile-computed hash
+- INTG-05: Sync status visible in web report builder photo gallery
+- INTG-06: Evidence integrity indicator (hash verified) in photo details
+
+**Success Criteria:**
+1. Photos captured on mobile appear in web report builder within minutes
+2. Thumbnails display correctly (no broken images for pending uploads)
+3. Chain of custody events visible in report audit log with original timestamps
+4. Hash verification status shown (green = verified, amber = pending)
+5. Web UI shows clear sync status for each photo
+
+**Plans:** 5 plans in 4 waves
+- [ ] 14-01-PLAN.md — Web API endpoints for upload confirmation + custody sync (Wave 1)
+- [ ] 14-02-PLAN.md — Mobile sync-service update to call confirmation after upload (Wave 2)
+- [ ] 14-03-PLAN.md — Hash verification and thumbnail generation server-side (Wave 2)
+- [ ] 14-04-PLAN.md — Web report builder UI for sync status (Wave 3)
+- [ ] 14-05-PLAN.md — Human verification checkpoint (Wave 4)
 
 ---
 

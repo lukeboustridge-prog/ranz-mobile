@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md
 
 **Core value:** Inspectors can capture legally defensible evidence on-site that syncs seamlessly to the web platform for report completion.
-**Current focus:** v2.0 Mobile App — Phase 13: Offline Sync
+**Current focus:** v2.0 Mobile App — Phase 14: Report Integration
 
 ## Current Position
 
-Phase: 13 of 15 (Offline Sync) — COMPLETE
-Plan: 5 of 5 complete
-Status: Phase complete (verification skipped)
-Last activity: 2026-02-07 — Phase 13 execution complete
+Phase: 14 of 15 (Report Integration) — PLANNING COMPLETE
+Plan: 0 of 5 complete
+Status: Ready for execution
+Last activity: 2026-02-07 — Phase 14 planning complete
 
-Progress: [██████████████████████████████████████████████████] 100%
+Progress: [                                                  ] 0%
 
 ## Accumulated Context
 
@@ -77,24 +77,24 @@ Phase 13 decisions:
 - SwiftFox OIDC specification not yet available — mobile uses custom auth, SSO scaffolding ready when spec received
 - iOS location permission approval rate — need mitigation strategy for "approximate location" denials (addressed in Phase 11 with warning UI)
 
-## Phase 13 Plans
+## Phase 14 Plans
 
 | Wave | Plan | Objective | Status |
 |------|------|-----------|--------|
-| 1 | 13-01 | Background sync infrastructure (expo-background-task + idempotency) | complete |
-| 1 | 13-02 | Sync custody events | complete |
-| 2 | 13-03 | Retry queue & hash verification | complete |
-| 3 | 13-04 | Conflict resolution UI + sync status bar | complete |
-| 4 | 13-05 | Human verification checkpoint | skipped |
+| 1 | 14-01 | Web API endpoints for upload confirmation + custody sync | not started |
+| 2 | 14-02 | Mobile sync-service update to call confirmation after upload | not started |
+| 2 | 14-03 | Hash verification and thumbnail generation server-side | not started |
+| 3 | 14-04 | Web report builder UI for sync status | not started |
+| 4 | 14-05 | Human verification checkpoint | not started |
 
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed Phase 13
+Stopped at: Planning Phase 14
 Resume file: None
 
 ## Next Steps
 
-Phase 13 complete. Proceed to Phase 14: `/gsd:plan-phase 14`
+Execute Phase 14: `/gsd:execute-phase 14`
 
 Note: Phase 13 verification was skipped. Run `/gsd:verify-work 13` before production deployment.
