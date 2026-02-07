@@ -10,11 +10,11 @@ See: .planning/PROJECT.md
 ## Current Position
 
 Phase: 13 of 15 (Offline Sync)
-Plan: 3 of 5 complete
+Plan: 4 of 5 complete
 Status: In progress
-Last activity: 2026-02-07 — Completed 13-03-PLAN.md (Retry Queue & Hash Verification)
+Last activity: 2026-02-07 — Completed 13-04-PLAN.md (Sync Service Enhancements)
 
-Progress: [██████████████████████████████░░░░░░░░░░░░░░░░░░░░] 60%
+Progress: [████████████████████████████████░░░░░░░░░░░░░░░░░░] 64%
 
 ## Accumulated Context
 
@@ -68,6 +68,9 @@ Phase 13 decisions:
 - [sync-06] Permanent failure marked by appending :permanently_failed to operation field
 - [sync-07] Post-sync verification uses original file in immutable originals/ directory
 - [sync-08] Hash verification failures logged but never block sync (fail-safe audit trail)
+- [ui-01] Use pageSheet presentation for conflict modal (iOS-style bottom sheet)
+- [ui-02] Failed badge is tappable to trigger retry (single-tap UX)
+- [ui-03] Conflict resolution logs but does not send to server yet (TODO for future phase)
 
 ### Blockers/Concerns
 
@@ -81,15 +84,15 @@ Phase 13 decisions:
 | 1 | 13-01 | Background sync infrastructure (expo-background-task + idempotency) | complete |
 | 1 | 13-02 | Sync custody events | complete |
 | 2 | 13-03 | Retry queue & hash verification | complete |
-| 2 | 13-04 | Sync service enhancements | pending |
+| 2 | 13-04 | Sync service enhancements | complete |
 | 3 | 13-05 | Verification checkpoint | pending |
 
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 13-03-PLAN.md
+Stopped at: Completed 13-04-PLAN.md
 Resume file: None
 
 ## Next Steps
 
-Continue with Plan 13-04: Sync Service Enhancements
+Continue with Plan 13-05: Verification Checkpoint
