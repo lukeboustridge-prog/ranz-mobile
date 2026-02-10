@@ -21,6 +21,8 @@ export default function HomeScreen() {
   const [reports, setReports] = useState<LocalReport[]>([]);
   const [stats, setStats] = useState({ reports: 0, photos: 0, defects: 0, elements: 0, pendingSync: 0, checklists: 0 });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const loadData = async () => {
     if (!isNative) {
@@ -48,17 +50,34 @@ export default function HomeScreen() {
 
     // Then bootstrap sync from server (user is authenticated at this point)
     if (isNative) {
+      setIsSyncing(true);
+      setSyncError(null);
       import("../../src/services/sync-service")
         .then(async ({ initializeSyncEngine }) => {
           try {
-            await initializeSyncEngine();
+            const result = await initializeSyncEngine();
+            console.log("[Home] Bootstrap result:", JSON.stringify(result));
+            if (!result.success && result.errors.length > 0) {
+              const errMsg = result.errors.map((e: { code: string; message: string }) => `${e.code}: ${e.message}`).join("; ");
+              console.error("[Home] Bootstrap errors:", errMsg);
+              setSyncError(errMsg);
+            }
             // Reload local data after sync completes
             await loadData();
           } catch (e) {
-            console.warn("[Home] Bootstrap sync failed:", e);
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error("[Home] Bootstrap sync failed:", msg);
+            setSyncError(msg);
+          } finally {
+            setIsSyncing(false);
           }
         })
-        .catch(() => {});
+        .catch((e) => {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error("[Home] Failed to import sync service:", msg);
+          setSyncError(`Import failed: ${msg}`);
+          setIsSyncing(false);
+        });
     }
   }, []);
 
@@ -157,6 +176,19 @@ export default function HomeScreen() {
 
       {/* Offline Indicator - slides down when offline */}
       <OfflineIndicator />
+
+      {/* Sync Status */}
+      {isSyncing && (
+        <View style={styles.syncBanner}>
+          <Text style={styles.syncBannerText}>Syncing reports from server...</Text>
+        </View>
+      )}
+      {syncError && (
+        <TouchableOpacity style={styles.errorBanner} onPress={() => setSyncError(null)}>
+          <Text style={styles.errorBannerText}>Sync error: {syncError}</Text>
+          <Text style={styles.errorDismiss}>Tap to dismiss</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Stats Cards */}
       <View style={styles.statsRow}>
@@ -377,6 +409,30 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     color: "#9ca3af",
+    marginTop: 4,
+  },
+  syncBanner: {
+    backgroundColor: "#dbeafe",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  syncBannerText: {
+    fontSize: 13,
+    color: "#1e40af",
+    textAlign: "center",
+  },
+  errorBanner: {
+    backgroundColor: "#fee2e2",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  errorBannerText: {
+    fontSize: 12,
+    color: "#991b1b",
+  },
+  errorDismiss: {
+    fontSize: 11,
+    color: "#dc2626",
     marginTop: 4,
   },
 });
