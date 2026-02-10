@@ -6,35 +6,9 @@
 import { useEffect, useState } from "react";
 import { Slot, useRouter, useSegments } from "expo-router";
 import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus, Text } from "react-native";
-import * as Sentry from "@sentry/react-native";
 import { initializeDatabase } from "../src/lib/sqlite";
-import { startAutoSync, stopAutoSync } from "../src/services/sync-service";
-import { ErrorBoundary } from "../src/components/ErrorBoundary";
-import { SyncProvider } from "../src/contexts/SyncContext";
-import { appLogger, authLogger } from "../src/lib/logger";
+import { appLogger } from "../src/lib/logger";
 import { useAuthStore } from "../src/stores/auth-store";
-import { useAuthDeepLink } from "../src/lib/auth/deep-linking";
-import { canUseBiometrics } from "../src/lib/auth/biometrics";
-import { config, isDevelopment } from "../src/config/environment";
-
-// Import background sync to register the task definition
-// This must be imported at the top level so TaskManager.defineTask runs
-import "../src/services/background-sync";
-import { registerBackgroundSync, unregisterBackgroundSync } from "../src/services/background-sync";
-
-// Initialize Sentry for crash reporting (only in preview/production)
-if (config.sentryDsn && !isDevelopment()) {
-  Sentry.init({
-    dsn: config.sentryDsn,
-    environment: config.environment,
-    // Enable performance monitoring
-    tracesSampleRate: config.environment === "production" ? 0.2 : 1.0,
-    // Attach stack traces to all messages
-    attachStacktrace: true,
-    // Only send events in non-development
-    enabled: !isDevelopment(),
-  });
-}
 
 /**
  * Auth Guard Component
@@ -44,39 +18,46 @@ function AuthGuard() {
   const { isAuthenticated, isLoading, biometricsEnabled, initialize } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
+  const [forceReady, setForceReady] = useState(false);
 
-  // Initialize auth on mount
+  // Initialize auth on mount with hard 5-second safety valve
   useEffect(() => {
     initialize();
-  }, []);
 
-  // Handle deep links for SSO callbacks
-  useAuthDeepLink();
+    // Absolute safety valve: force loading to stop after 5 seconds no matter what
+    const safety = setTimeout(() => {
+      console.warn("[AuthGuard] Safety valve triggered — forcing ready state");
+      setForceReady(true);
+    }, 5_000);
+
+    return () => clearTimeout(safety);
+  }, []);
 
   // Auth routing logic
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading && !forceReady) return;
 
     const inAuthGroup = segments[0] === "(auth)";
+    const inMainGroup = segments[0] === "(main)";
 
-    if (isAuthenticated && inAuthGroup) {
-      // Authenticated user in auth pages - go to main
+    if (isAuthenticated && !inMainGroup) {
+      // Authenticated but not in main area (on index or auth pages) → go to home
       router.replace("/(main)/home");
     } else if (!isAuthenticated && !inAuthGroup) {
-      // Not authenticated and trying to access protected pages
-      // Check if biometrics enabled for quick unlock
+      // Not authenticated and not on auth pages → go to login
       if (biometricsEnabled) {
         router.replace("/(auth)/biometric-unlock");
       } else {
         router.replace("/(auth)/login");
       }
     }
-  }, [isLoading, isAuthenticated, segments, biometricsEnabled]);
+  }, [isLoading, isAuthenticated, segments, biometricsEnabled, forceReady]);
 
-  if (isLoading) {
+  if (isLoading && !forceReady) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2d5c8f" />
+        <ActivityIndicator size="large" color="#3c4b5d" />
+        <Text style={styles.loadingText}>Initializing...</Text>
       </View>
     );
   }
@@ -85,104 +66,82 @@ function AuthGuard() {
 }
 
 /**
- * Database Initialization Component
- * Also handles sync initialization and background task registration
+ * Database Initialization — blocks rendering until SQLite is ready
+ * (with timeout safety net to prevent infinite spinner)
  */
 function DatabaseProvider({ children }: { children: React.ReactNode }) {
   const [isDbReady, setIsDbReady] = useState(false);
-  const [dbError, setDbError] = useState<Error | null>(null);
 
   useEffect(() => {
-    async function initDb() {
-      try {
-        await initializeDatabase();
+    Promise.race([
+      initializeDatabase(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("DB timeout")), 10_000)
+      ),
+    ])
+      .then(() => {
+        appLogger.info("Database initialized");
         setIsDbReady(true);
+      })
+      .catch((e) => {
+        appLogger.error("Database init failed: " + (e as Error).message);
+        // Still mark as ready so the app doesn't hang — screens will
+        // degrade gracefully with empty data rather than infinite spinner
+        setIsDbReady(true);
+      });
 
-        // Register background sync task after DB is ready
-        const registered = await registerBackgroundSync();
-        if (registered) {
-          appLogger.info("Background sync registered successfully");
-        } else {
-          appLogger.warn("Background sync registration failed or not available");
-        }
-
-        // Start foreground auto-sync when app is active
+    // Start auto-sync (bootstrap is triggered from home screen after auth is ready)
+    import("../src/services/sync-service")
+      .then(({ startAutoSync }) => {
         startAutoSync();
-      } catch (error) {
-        appLogger.exception("Failed to initialize database", error);
-        setDbError(error instanceof Error ? error : new Error("Database init failed"));
-      }
-    }
-    initDb();
+      })
+      .catch(() => {});
 
-    // Cleanup on unmount
+    // Lazy-load background sync
+    import("../src/services/background-sync")
+      .then(({ registerBackgroundSync }) => registerBackgroundSync().catch(() => {}))
+      .catch(() => {});
+
     return () => {
-      stopAutoSync();
+      import("../src/services/sync-service")
+        .then(({ stopAutoSync }) => stopAutoSync())
+        .catch(() => {});
     };
   }, []);
 
-  // Handle app state changes for foreground/background sync management
   useEffect(() => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === "active") {
-        // App came to foreground - start auto-sync
-        appLogger.debug("Foreground - starting auto-sync");
-        startAutoSync();
-      } else if (nextAppState === "background") {
-        // App went to background - stop foreground sync (background task handles it)
-        appLogger.debug("Background - stopping foreground auto-sync");
-        stopAutoSync();
+    const sub = AppState.addEventListener("change", (state: AppStateStatus) => {
+      if (state === "active") {
+        import("../src/services/sync-service").then(({ startAutoSync }) => startAutoSync()).catch(() => {});
+      } else if (state === "background") {
+        import("../src/services/sync-service").then(({ stopAutoSync }) => stopAutoSync()).catch(() => {});
       }
-    };
-
-    const subscription = AppState.addEventListener("change", handleAppStateChange);
-
-    return () => {
-      subscription.remove();
-    };
+    });
+    return () => sub.remove();
   }, []);
-
-  if (dbError) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorIcon}>!</Text>
-        <Text style={styles.errorTitle}>Database Error</Text>
-        <Text style={styles.errorMessage}>
-          Unable to initialize the database. Please restart the app.
-        </Text>
-        {__DEV__ && (
-          <Text style={styles.errorDetails}>{dbError.message}</Text>
-        )}
-      </View>
-    );
-  }
 
   if (!isDbReady) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2d5c8f" />
+        <ActivityIndicator size="large" color="#3c4b5d" />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
-  return <SyncProvider>{children}</SyncProvider>;
+  return <>{children}</>;
 }
 
 /**
  * Root Layout Component
  */
-function RootLayout() {
+export default function RootLayout() {
   return (
-    <ErrorBoundary>
-      <DatabaseProvider>
-        <AuthGuard />
-      </DatabaseProvider>
-    </ErrorBoundary>
+    <DatabaseProvider>
+      <AuthGuard />
+    </DatabaseProvider>
   );
 }
-
-// Wrap with Sentry for error reporting in preview/production
-export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
   loadingContainer: {
@@ -191,41 +150,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#ffffff",
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8fafc",
-    padding: 24,
-  },
-  errorIcon: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: "#ffffff",
-    backgroundColor: "#dc2626",
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    textAlign: "center",
-    lineHeight: 60,
-    marginBottom: 16,
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 8,
-  },
-  errorMessage: {
+  loadingText: {
+    marginTop: 12,
     fontSize: 14,
     color: "#6b7280",
-    textAlign: "center",
-    lineHeight: 20,
-  },
-  errorDetails: {
-    fontSize: 11,
-    color: "#dc2626",
-    marginTop: 16,
-    fontFamily: "monospace",
   },
 });
