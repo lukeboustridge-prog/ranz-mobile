@@ -368,6 +368,91 @@ export interface ReportSummary {
   updatedAt: string;
   photoCount: number;
   defectCount: number;
+  // Full related data included in bootstrap down-sync
+  photos?: DownloadedPhoto[];
+  defects?: DownloadedDefect[];
+  roofElements?: DownloadedRoofElement[];
+  complianceAssessment?: DownloadedComplianceAssessment | null;
+}
+
+// ============================================
+// DOWNLOAD TYPES (Server → Mobile)
+// ============================================
+
+export interface DownloadedPhoto {
+  id: string;
+  reportId: string;
+  defectId: string | null;
+  roofElementId: string | null;
+  filename: string;
+  originalFilename: string;
+  mimeType: string;
+  fileSize: number;
+  url: string;
+  thumbnailUrl: string | null;
+  photoType: PhotoType;
+  capturedAt: string | null;
+  gpsLat: number | null;
+  gpsLng: number | null;
+  gpsAltitude: number | null;
+  cameraMake: string | null;
+  cameraModel: string | null;
+  exposureTime: string | null;
+  fNumber: number | null;
+  iso: number | null;
+  focalLength: number | null;
+  originalHash: string;
+  caption: string | null;
+  annotations: unknown | null;
+  annotatedUrl: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface DownloadedDefect {
+  id: string;
+  reportId: string;
+  roofElementId: string | null;
+  defectNumber: number;
+  title: string;
+  description: string;
+  location: string;
+  classification: DefectClass;
+  severity: DefectSeverity;
+  observation: string;
+  analysis: string | null;
+  opinion: string | null;
+  codeReference: string | null;
+  copReference: string | null;
+  recommendation: string | null;
+  priorityLevel: PriorityLevel | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DownloadedRoofElement {
+  id: string;
+  reportId: string;
+  elementType: ElementType;
+  location: string;
+  claddingType: string | null;
+  material: string | null;
+  manufacturer: string | null;
+  pitch: number | null;
+  area: number | null;
+  conditionRating: ConditionRating | null;
+  conditionNotes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DownloadedComplianceAssessment {
+  id: string;
+  reportId: string;
+  checklistResults: Record<string, Record<string, ComplianceStatus>>;
+  nonComplianceSummary: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================

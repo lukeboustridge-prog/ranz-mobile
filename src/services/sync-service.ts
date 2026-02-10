@@ -25,9 +25,13 @@ import {
   getReport,
   getAllReports,
   getPendingSyncReports,
+  saveRoofElement,
   getRoofElementsForReport,
+  saveDefect,
   getDefectsForReport,
+  savePhoto,
   getPhotosForReport,
+  saveComplianceAssessment,
   getComplianceAssessment,
   getPendingUploadPhotos,
   updatePhotoSyncStatus,
@@ -77,6 +81,10 @@ import type {
   Checklist,
   ReportTemplate,
   ReportSummary,
+  DownloadedPhoto,
+  DownloadedDefect,
+  DownloadedRoofElement,
+  DownloadedComplianceAssessment,
   User,
   SyncUploadPayload,
   SyncUploadResponse,
@@ -1607,6 +1615,7 @@ class SyncEngine {
 
   async downloadRecentReports(reports: ReportSummary[]): Promise<number> {
     let count = 0;
+    const now = new Date().toISOString();
     console.log(`[Sync] downloadRecentReports: received ${reports.length} reports from server`);
     if (reports.length > 0) {
       console.log(`[Sync] Report IDs: ${reports.map(r => `${r.reportNumber}(${r.id})`).join(', ')}`);
@@ -1663,19 +1672,152 @@ class SyncEngine {
           syncStatus: "synced",
           createdAt: report.createdAt,
           updatedAt: report.updatedAt,
-          syncedAt: new Date().toISOString(),
+          syncedAt: now,
           lastSyncError: null,
         };
 
         await saveReport(localReport);
         count++;
         console.log(`[Sync] Saved report ${report.reportNumber} (${report.id}) to SQLite`);
+
+        // Save related data if included in bootstrap response
+        const reportId = localReport.id;
+
+        // Save roof elements
+        if (report.roofElements && report.roofElements.length > 0) {
+          for (const element of report.roofElements) {
+            try {
+              await saveRoofElement({
+                id: element.id,
+                reportId,
+                elementType: element.elementType,
+                location: element.location,
+                claddingType: element.claddingType,
+                material: element.material,
+                manufacturer: element.manufacturer,
+                pitch: element.pitch,
+                area: element.area,
+                conditionRating: element.conditionRating,
+                conditionNotes: element.conditionNotes,
+                syncStatus: "synced",
+                createdAt: element.createdAt,
+                updatedAt: element.updatedAt,
+                syncedAt: now,
+              });
+            } catch (elemError) {
+              console.error(`[Sync] Failed to save roof element ${element.id}:`, elemError);
+            }
+          }
+          console.log(`[Sync] Saved ${report.roofElements.length} roof elements for report ${report.reportNumber}`);
+        }
+
+        // Save defects
+        if (report.defects && report.defects.length > 0) {
+          for (const defect of report.defects) {
+            try {
+              await saveDefect({
+                id: defect.id,
+                reportId,
+                roofElementId: defect.roofElementId,
+                defectNumber: defect.defectNumber,
+                title: defect.title,
+                description: defect.description,
+                location: defect.location,
+                classification: defect.classification,
+                severity: defect.severity,
+                observation: defect.observation,
+                analysis: defect.analysis,
+                opinion: defect.opinion,
+                codeReference: defect.codeReference,
+                copReference: defect.copReference,
+                recommendation: defect.recommendation,
+                priorityLevel: defect.priorityLevel,
+                syncStatus: "synced",
+                createdAt: defect.createdAt,
+                updatedAt: defect.updatedAt,
+                syncedAt: now,
+              });
+            } catch (defectError) {
+              console.error(`[Sync] Failed to save defect ${defect.id}:`, defectError);
+            }
+          }
+          console.log(`[Sync] Saved ${report.defects.length} defects for report ${report.reportNumber}`);
+        }
+
+        // Save photos (metadata only — binary is accessed via URL)
+        if (report.photos && report.photos.length > 0) {
+          for (const photo of report.photos) {
+            try {
+              await savePhoto({
+                id: photo.id,
+                reportId,
+                defectId: photo.defectId,
+                roofElementId: photo.roofElementId,
+                localUri: photo.url, // Use server URL as localUri for downloaded photos
+                thumbnailUri: photo.thumbnailUrl,
+                filename: photo.filename,
+                originalFilename: photo.originalFilename,
+                mimeType: photo.mimeType,
+                fileSize: photo.fileSize,
+                photoType: photo.photoType,
+                quickTag: null,
+                capturedAt: photo.capturedAt,
+                gpsLat: photo.gpsLat,
+                gpsLng: photo.gpsLng,
+                gpsAltitude: photo.gpsAltitude,
+                gpsAccuracy: null,
+                cameraMake: photo.cameraMake,
+                cameraModel: photo.cameraModel,
+                exposureTime: photo.exposureTime ? parseFloat(photo.exposureTime) : null,
+                fNumber: photo.fNumber,
+                iso: photo.iso,
+                focalLength: photo.focalLength,
+                originalHash: photo.originalHash,
+                annotationsJson: photo.annotations ? JSON.stringify(photo.annotations) : null,
+                annotatedUri: photo.annotatedUrl,
+                measurementsJson: null,
+                calibrationJson: null,
+                measuredUri: null,
+                caption: photo.caption,
+                sortOrder: photo.sortOrder,
+                syncStatus: "synced",
+                uploadedUrl: photo.url,
+                syncedAt: now,
+                lastSyncError: null,
+                createdAt: photo.createdAt,
+              });
+            } catch (photoError) {
+              console.error(`[Sync] Failed to save photo ${photo.id}:`, photoError);
+            }
+          }
+          console.log(`[Sync] Saved ${report.photos.length} photos for report ${report.reportNumber}`);
+        }
+
+        // Save compliance assessment
+        if (report.complianceAssessment) {
+          try {
+            const ca = report.complianceAssessment;
+            await saveComplianceAssessment({
+              id: ca.id,
+              reportId,
+              checklistResultsJson: JSON.stringify(ca.checklistResults),
+              nonComplianceSummary: ca.nonComplianceSummary,
+              syncStatus: "synced",
+              createdAt: ca.createdAt,
+              updatedAt: ca.updatedAt,
+              syncedAt: now,
+            });
+            console.log(`[Sync] Saved compliance assessment for report ${report.reportNumber}`);
+          } catch (compError) {
+            console.error(`[Sync] Failed to save compliance assessment:`, compError);
+          }
+        }
       } catch (error) {
         console.error(`[Sync] FAILED to save report ${report.reportNumber} (${report.id}):`, error);
       }
     }
 
-    console.log(`[Sync] Downloaded ${count} report summaries`);
+    console.log(`[Sync] Downloaded ${count} reports with full data`);
     return count;
   }
 
