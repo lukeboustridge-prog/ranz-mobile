@@ -21,7 +21,7 @@ import {
   getVoiceNotesForReport,
   getVoiceNotesForDefect,
   deleteVoiceNote as deleteVoiceNoteFromDb,
-  addToSyncQueue,
+  markReportDirty,
 } from "../lib/sqlite";
 import { generateHashFromBase64 } from "./evidence-service";
 import { logCapture, logStorage } from "./chain-of-custody";
@@ -272,16 +272,8 @@ class VoiceNoteService {
         uri
       );
 
-      // Add to sync queue
-      await addToSyncQueue("voice_note", id, "create", {
-        reportId,
-        defectId,
-        roofElementId,
-        metadata: {
-          ...metadata,
-          originalHash,
-        },
-      });
+      // Mark report as needing sync
+      await markReportDirty(reportId);
 
       console.log("[VoiceNoteService] Recording saved:", {
         id,
@@ -434,7 +426,7 @@ class VoiceNoteService {
   /**
    * Delete a voice note
    */
-  async deleteVoiceNote(id: string, localUri: string): Promise<void> {
+  async deleteVoiceNote(id: string, localUri: string, reportId?: string): Promise<void> {
     try {
       // Delete from file system
       await deleteAsync(localUri, { idempotent: true });
@@ -442,8 +434,10 @@ class VoiceNoteService {
       // Delete from database
       await deleteVoiceNoteFromDb(id);
 
-      // Add delete to sync queue
-      await addToSyncQueue("voice_note", id, "delete", { id });
+      // Mark report as needing sync
+      if (reportId) {
+        await markReportDirty(reportId);
+      }
 
       console.log("[VoiceNoteService] Voice note deleted:", id);
     } catch (error) {

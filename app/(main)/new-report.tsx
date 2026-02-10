@@ -165,12 +165,6 @@ export default function NewReportScreen() {
 
       await saveReport(newReport);
 
-      // Add to sync queue (only on native)
-      if (Platform.OS !== "web") {
-        const sqlite = await import("../../src/lib/sqlite");
-        await sqlite.addToSyncQueue("report", id, "create", newReport as unknown as Record<string, unknown>);
-      }
-
       // Navigate to the report detail
       router.replace(`/(main)/report-detail/${id}`);
     } catch (error) {

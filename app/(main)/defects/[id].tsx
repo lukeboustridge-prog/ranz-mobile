@@ -163,10 +163,9 @@ export default function EditDefectScreen() {
 
       await saveDefect(updatedDefect);
 
-      // Add to sync queue
+      // Mark report as needing sync
       if (Platform.OS !== "web") {
         const sqlite = await import("../../../src/lib/sqlite");
-        await sqlite.addToSyncQueue("defect", id!, "update", updatedDefect as unknown as Record<string, unknown>);
         await sqlite.markReportDirty(reportId);
       }
 

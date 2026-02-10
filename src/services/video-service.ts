@@ -22,7 +22,7 @@ import {
   getVideosForReport,
   getVideoById,
   deleteVideo as deleteVideoFromDb,
-  addToSyncQueue,
+  markReportDirty,
 } from "../lib/sqlite";
 import {
   getCurrentLocation,
@@ -321,17 +321,8 @@ class VideoService {
         uri
       );
 
-      // Add to sync queue with GPS track
-      await addToSyncQueue("video", id, "create", {
-        reportId,
-        defectId,
-        roofElementId,
-        metadata: {
-          ...metadata,
-          originalHash,
-          gpsTrack: this.gpsTrack.length > 0 ? this.gpsTrack : undefined,
-        },
-      });
+      // Mark report as needing sync
+      await markReportDirty(reportId);
 
       console.log("[VideoService] Recording saved with evidence integrity:", {
         id,
@@ -478,14 +469,19 @@ class VideoService {
    */
   async deleteVideo(id: string, localUri: string): Promise<void> {
     try {
+      // Look up video to get reportId before deleting
+      const video = await getVideoById(id);
+
       // Delete from file system
       await deleteAsync(localUri, { idempotent: true });
 
       // Delete from database
       await deleteVideoFromDb(id);
 
-      // Add delete to sync queue
-      await addToSyncQueue("video", id, "delete", { id });
+      // Mark report as needing sync
+      if (video?.reportId) {
+        await markReportDirty(video.reportId);
+      }
 
       console.log("[VideoService] Video deleted:", id);
     } catch (error) {

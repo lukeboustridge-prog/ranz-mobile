@@ -21,7 +21,7 @@ import * as Device from "expo-device";
 import {
   savePhoto,
   getPhotosForReport,
-  addToSyncQueue,
+  markReportDirty,
   deletePhoto as deletePhotoFromDB,
   getPhotoById,
   getUser,
@@ -502,14 +502,8 @@ class PhotoService {
 
       await savePhoto(localPhoto);
 
-      // Add to sync queue
-      await addToSyncQueue("photo", id, "create", {
-        reportId,
-        defectId,
-        roofElementId,
-        photoType,
-        metadata,
-      });
+      // Mark report as needing sync so the next sync cycle uploads this photo
+      await markReportDirty(reportId);
 
       // Log chain of custody event (sensitive data handled by logger)
       photoLogger.info("Photo captured with evidence integrity", {
@@ -656,12 +650,8 @@ class PhotoService {
         `Photo deleted from mobile device. Filename: ${photo.filename}, Sync status: ${photo.syncStatus}`
       );
 
-      // Add to sync queue for server deletion (if photo was ever queued for upload)
-      await addToSyncQueue("photo", photoId, "delete", {
-        reportId: photo.reportId,
-        originalHash: photo.originalHash,
-        deletedAt: new Date().toISOString(),
-      });
+      // Mark report as needing sync so the deletion propagates to server
+      await markReportDirty(photo.reportId);
 
       photoLogger.info("Photo deleted", {
         photoId,

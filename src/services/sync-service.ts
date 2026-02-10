@@ -1352,6 +1352,10 @@ class SyncEngine {
     const startTime = Date.now();
 
     try {
+      // Clear stale sync queue items — the queue is not consumed;
+      // sync happens through the report-bundle upload path instead.
+      await clearSyncQueue();
+
       return await this.downloadFromServer();
     } finally {
       this.isSyncing = false;

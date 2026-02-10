@@ -102,10 +102,9 @@ export default function NewElementScreen() {
 
       await saveRoofElement(newElement);
 
-      // Add to sync queue
+      // Mark report as needing sync
       if (Platform.OS !== "web") {
         const sqlite = await import("../../../src/lib/sqlite");
-        await sqlite.addToSyncQueue("element", id, "create", newElement as unknown as Record<string, unknown>);
         await sqlite.markReportDirty(reportId);
       }
 

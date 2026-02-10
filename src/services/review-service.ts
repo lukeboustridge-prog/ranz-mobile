@@ -7,7 +7,6 @@ import {
   getReport,
   updateReportStatus,
   getReportsPendingReview,
-  addToSyncQueue,
 } from "../lib/sqlite";
 import type { LocalReport } from "../types/database";
 import type { ReportStatus } from "../types/shared";
@@ -56,15 +55,9 @@ class ReviewService {
         return { success: false, error: validation.error };
       }
 
-      // Update local status
+      // Update local status (also sets sync_status = 'pending')
       const timestamp = new Date().toISOString();
       await updateReportStatus(reportId, "PENDING_REVIEW", timestamp);
-
-      // Add to sync queue for server update
-      await addToSyncQueue("report", reportId, "submit_for_review", {
-        reportId,
-        submittedAt: timestamp,
-      });
 
       console.log("[ReviewService] Report submitted for review:", reportId);
       return { success: true };
@@ -118,16 +111,8 @@ class ReviewService {
     try {
       const timestamp = new Date().toISOString();
 
-      // Update local status
+      // Update local status (also sets sync_status = 'pending')
       await updateReportStatus(reportId, "APPROVED", timestamp);
-
-      // Add to sync queue
-      await addToSyncQueue("report", reportId, "review_action", {
-        action: "APPROVE",
-        reviewerId,
-        note,
-        approvedAt: timestamp,
-      });
 
       // Get updated report
       const report = await getReport(reportId);
@@ -158,16 +143,8 @@ class ReviewService {
 
       const timestamp = new Date().toISOString();
 
-      // Update local status back to draft
+      // Update local status back to draft (also sets sync_status = 'pending')
       await updateReportStatus(reportId, "DRAFT", null);
-
-      // Add to sync queue
-      await addToSyncQueue("report", reportId, "review_action", {
-        action: "REJECT",
-        reviewerId,
-        note,
-        rejectedAt: timestamp,
-      });
 
       const report = await getReport(reportId);
 
@@ -198,17 +175,8 @@ class ReviewService {
 
       const timestamp = new Date().toISOString();
 
-      // Update local status back to in_progress
+      // Update local status back to in_progress (also sets sync_status = 'pending')
       await updateReportStatus(reportId, "IN_PROGRESS", null);
-
-      // Add to sync queue
-      await addToSyncQueue("report", reportId, "review_action", {
-        action: "REQUEST_REVISION",
-        reviewerId,
-        note,
-        revisionItems,
-        requestedAt: timestamp,
-      });
 
       const report = await getReport(reportId);
 
@@ -239,13 +207,8 @@ class ReviewService {
 
       const timestamp = new Date().toISOString();
 
-      // Update local status
+      // Update local status (also sets sync_status = 'pending')
       await updateReportStatus(reportId, "FINALISED", timestamp);
-
-      // Add to sync queue
-      await addToSyncQueue("report", reportId, "finalise", {
-        finalisedAt: timestamp,
-      });
 
       const updatedReport = await getReport(reportId);
 

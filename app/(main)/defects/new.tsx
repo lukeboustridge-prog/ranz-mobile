@@ -3,7 +3,7 @@
  * Form to create a new defect
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,8 +14,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Modal,
+  FlatList,
+  Image,
+  ActionSheetIOS,
+  Dimensions,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import { useLocalDB } from "../../../src/hooks/useLocalDB";
 import { ChipSelector } from "../../../src/components/ChipSelector";
 import { FormSection } from "../../../src/components/FormSection";
@@ -44,6 +49,12 @@ const PRIORITY_OPTIONS = [
   { value: PriorityLevel.LONG_TERM, label: "Long Term" },
 ];
 
+function generateLocalId() {
+  return `local_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+}
+
+const PICKER_ITEM_SIZE = (Dimensions.get("window").width - 48 - 16) / 3; // 3 columns, 16px padding, 8px gaps
+
 export default function NewDefectScreen() {
   const { reportId } = useLocalSearchParams<{ reportId: string }>();
   const router = useRouter();
@@ -52,11 +63,18 @@ export default function NewDefectScreen() {
     getNextDefectNumber,
     getRoofElements,
     getPhotosForDefect,
+    getPhotos,
+    updatePhotoClassification,
   } = useLocalDB();
+
+  // Pre-generate defect ID so camera can save photos with it
+  const [defectId] = useState(generateLocalId);
 
   const [isLoading, setIsLoading] = useState(false);
   const [roofElements, setRoofElements] = useState<LocalRoofElement[]>([]);
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
+  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
+  const [unlinkedPhotos, setUnlinkedPhotos] = useState<LocalPhoto[]>([]);
 
   // Form state
   const [title, setTitle] = useState("");
@@ -76,10 +94,22 @@ export default function NewDefectScreen() {
     loadRoofElements();
   }, [reportId]);
 
+  // Reload photos every time the screen gains focus (e.g. returning from camera)
+  useFocusEffect(
+    useCallback(() => {
+      loadDefectPhotos();
+    }, [defectId])
+  );
+
   const loadRoofElements = async () => {
     if (!reportId) return;
     const elements = await getRoofElements(reportId);
     setRoofElements(elements);
+  };
+
+  const loadDefectPhotos = async () => {
+    const defectPhotos = await getPhotosForDefect(defectId);
+    setPhotos(defectPhotos);
   };
 
   const validateForm = (): boolean => {
@@ -106,10 +136,9 @@ export default function NewDefectScreen() {
     try {
       const defectNumber = await getNextDefectNumber(reportId);
       const now = new Date().toISOString();
-      const id = `local_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
       const newDefect: LocalDefect = {
-        id,
+        id: defectId,
         reportId,
         roofElementId,
         defectNumber,
@@ -133,11 +162,9 @@ export default function NewDefectScreen() {
 
       await saveDefect(newDefect);
 
-      // Add to sync queue
+      // Mark report as needing sync
       if (Platform.OS !== "web") {
         const sqlite = await import("../../../src/lib/sqlite");
-        await sqlite.addToSyncQueue("defect", id, "create", newDefect as unknown as Record<string, unknown>);
-        // Mark report as dirty
         await sqlite.markReportDirty(reportId);
       }
 
@@ -151,14 +178,82 @@ export default function NewDefectScreen() {
   };
 
   const handleAddPhoto = () => {
-    // Navigate to camera capture with defect context
-    // For now, we'll show an alert since camera flow needs additional setup
-    Alert.alert(
-      "Add Photo",
-      "To add photos, go back to the report and use the Photo Capture feature.",
-      [{ text: "OK" }]
-    );
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ["Cancel", "Take Photo", "Link Existing Photo"],
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) navigateToCamera();
+          if (buttonIndex === 2) openPhotoPicker();
+        }
+      );
+    } else {
+      // Android / web fallback using Alert
+      Alert.alert("Add Photo", "Choose an option", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Take Photo", onPress: navigateToCamera },
+        { text: "Link Existing Photo", onPress: openPhotoPicker },
+      ]);
+    }
   };
+
+  const navigateToCamera = () => {
+    if (!reportId) return;
+    router.push(`/(main)/photo-capture?reportId=${reportId}&defectId=${defectId}`);
+  };
+
+  const openPhotoPicker = async () => {
+    if (!reportId) return;
+    const allPhotos = await getPhotos(reportId);
+    const available = allPhotos.filter((p) => !p.defectId);
+    setUnlinkedPhotos(available);
+    setShowPhotoPicker(true);
+  };
+
+  const handleLinkPhoto = async (photo: LocalPhoto) => {
+    try {
+      await updatePhotoClassification(photo.id, { defectId });
+      // Refresh both lists
+      await loadDefectPhotos();
+      setUnlinkedPhotos((prev) => prev.filter((p) => p.id !== photo.id));
+    } catch (error) {
+      console.error("Failed to link photo:", error);
+      Alert.alert("Error", "Failed to link photo.");
+    }
+  };
+
+  const handleRemovePhoto = async (photoId: string) => {
+    try {
+      await updatePhotoClassification(photoId, { defectId: null });
+      await loadDefectPhotos();
+    } catch (error) {
+      console.error("Failed to unlink photo:", error);
+      Alert.alert("Error", "Failed to unlink photo.");
+    }
+  };
+
+  const renderPickerItem = ({ item }: { item: LocalPhoto }) => (
+    <TouchableOpacity
+      style={pickerStyles.photoItem}
+      onPress={() => handleLinkPhoto(item)}
+    >
+      <Image
+        source={{ uri: item.thumbnailUri || item.localUri }}
+        style={pickerStyles.photoImage}
+      />
+      {item.caption ? (
+        <Text style={pickerStyles.photoCaption} numberOfLines={1}>
+          {item.caption}
+        </Text>
+      ) : (
+        <Text style={pickerStyles.photoType} numberOfLines={1}>
+          {item.photoType.replace(/_/g, " ")}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
 
   return (
     <KeyboardAvoidingView
@@ -179,7 +274,7 @@ export default function NewDefectScreen() {
           <PhotoGrid
             photos={photos}
             onAddPhoto={handleAddPhoto}
-            onRemovePhoto={(id) => setPhotos(photos.filter((p) => p.id !== id))}
+            onRemovePhoto={handleRemovePhoto}
           />
           <Text style={styles.helperText}>
             Photos help document and evidence the defect
@@ -372,6 +467,42 @@ export default function NewDefectScreen() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Photo Picker Modal */}
+      <Modal
+        visible={showPhotoPicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowPhotoPicker(false)}
+      >
+        <View style={pickerStyles.container}>
+          <View style={pickerStyles.header}>
+            <Text style={pickerStyles.title}>Link Existing Photo</Text>
+            <TouchableOpacity onPress={() => setShowPhotoPicker(false)}>
+              <Text style={pickerStyles.closeButton}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={pickerStyles.subtitle}>
+            Tap a photo to link it to this defect
+          </Text>
+          <FlatList
+            data={unlinkedPhotos}
+            renderItem={renderPickerItem}
+            keyExtractor={(item) => item.id}
+            numColumns={3}
+            contentContainerStyle={pickerStyles.grid}
+            ListEmptyComponent={
+              <View style={pickerStyles.emptyState}>
+                <Text style={pickerStyles.emptyTitle}>No unlinked photos</Text>
+                <Text style={pickerStyles.emptySubtitle}>
+                  All report photos are already linked to defects.
+                  Use "Take Photo" to capture a new one.
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -469,5 +600,83 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
+  },
+});
+
+const pickerStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  closeButton: {
+    fontSize: 16,
+    color: "#2d5c8f",
+    fontWeight: "600",
+  },
+  subtitle: {
+    fontSize: 13,
+    color: "#64748b",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: "#ffffff",
+  },
+  grid: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  photoItem: {
+    width: PICKER_ITEM_SIZE,
+    marginRight: 8,
+    marginBottom: 12,
+  },
+  photoImage: {
+    width: PICKER_ITEM_SIZE,
+    height: PICKER_ITEM_SIZE,
+    borderRadius: 8,
+    backgroundColor: "#e2e8f0",
+  },
+  photoCaption: {
+    fontSize: 11,
+    color: "#374151",
+    marginTop: 4,
+  },
+  photoType: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 4,
+    textTransform: "capitalize",
+  },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
+    lineHeight: 20,
   },
 });
