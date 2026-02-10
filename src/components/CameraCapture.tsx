@@ -603,7 +603,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.2)",
   },
   typeButtonActive: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
   },
   typeButtonText: {
     color: "#fff",
@@ -771,7 +771,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#333",
   },
   elementOptionSelected: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
   },
   elementOptionText: {
     color: "#fff",

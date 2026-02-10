@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e2e8f0",
   },
   backLink: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 16,
   },
   title: {
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   changeReportText: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -390,7 +390,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   selectReportButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   warningAction: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     borderTopColor: "#e2e8f0",
   },
   captureButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     borderRadius: 12,
     paddingVertical: 16,
     flexDirection: "row",

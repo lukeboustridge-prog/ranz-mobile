@@ -4,10 +4,12 @@
  */
 
 import { useState } from "react";
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { Link, useRouter } from "expo-router";
 import NetInfo from "@react-native-community/netinfo";
 import { useAuthStore } from "../../src/stores/auth-store";
+import { RanzLogo } from "../../src/components/RanzLogo";
+import { COLORS } from "../../src/lib/theme";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -65,11 +67,11 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <View style={styles.content}>
-        {/* Logo/Header */}
-        <View style={styles.header}>
-          <Text style={styles.logo}>RANZ</Text>
-          <Text style={styles.subtitle}>Roofing Inspection</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {/* Branded Header */}
+        <View style={styles.brandHeader}>
+          <RanzLogo size="large" />
+          <Text style={styles.brandSubtitle}>Roofing Inspection</Text>
         </View>
 
         {/* Login Form */}
@@ -85,6 +87,7 @@ export default function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="inspector@example.com"
+              placeholderTextColor={COLORS.gray[400]}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -100,6 +103,7 @@ export default function LoginScreen() {
               value={password}
               onChangeText={setPassword}
               placeholder="Enter your password"
+              placeholderTextColor={COLORS.gray[400]}
               secureTextEntry
               autoComplete="password"
               editable={!isLoading}
@@ -110,6 +114,7 @@ export default function LoginScreen() {
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleSignIn}
             disabled={isLoading}
+            activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>{isLoading ? "Signing In..." : "Sign In"}</Text>
           </TouchableOpacity>
@@ -123,7 +128,7 @@ export default function LoginScreen() {
             </Link>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -131,41 +136,37 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: COLORS.primary[500],
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    paddingHorizontal: 24,
   },
-  header: {
+  brandHeader: {
     alignItems: "center",
-    marginBottom: 40,
+    paddingTop: 60,
+    paddingBottom: 32,
   },
-  logo: {
-    fontSize: 48,
-    fontWeight: "bold",
-    color: "#2d5c8f",
-  },
-  subtitle: {
+  brandSubtitle: {
     fontSize: 16,
-    color: "#64748b",
-    marginTop: 4,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 12,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   form: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    paddingTop: 32,
+    flex: 1,
+    minHeight: 400,
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#1e293b",
+    color: COLORS.gray[900],
     marginBottom: 20,
   },
   error: {
@@ -182,31 +183,31 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#374151",
+    color: COLORS.gray[700],
     marginBottom: 6,
   },
   input: {
-    backgroundColor: "#f9fafb",
+    backgroundColor: COLORS.gray[50],
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: COLORS.gray[200],
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
-    color: "#1f2937",
+    color: COLORS.gray[800],
   },
   button: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: COLORS.primary[500],
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 8,
   },
   buttonDisabled: {
-    backgroundColor: "#94a3b8",
+    backgroundColor: COLORS.gray[400],
   },
   buttonText: {
-    color: "#ffffff",
+    color: COLORS.white,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -216,11 +217,11 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   footerText: {
-    color: "#64748b",
+    color: COLORS.gray[500],
     fontSize: 14,
   },
   link: {
-    color: "#2d5c8f",
+    color: COLORS.primary[500],
     fontSize: 14,
     fontWeight: "600",
   },

@@ -8,18 +8,18 @@
 // ============================================
 
 export const COLORS = {
-  // Primary - RANZ Blue
+  // Primary - RANZ Charcoal
   primary: {
-    900: "#0c1929",
-    800: "#142942",
-    700: "#1c3a5c",
-    600: "#254b75",
-    500: "#2d5c8f", // Primary
-    400: "#4a7ab0",
-    300: "#7199c4",
-    200: "#a3bed9",
-    100: "#d1deed",
-    50: "#e8eef6",
+    900: "#0f141a",
+    800: "#171e26",
+    700: "#232d38",
+    600: "#2f3c4a",
+    500: "#3c4b5d", // Primary — RANZ Charcoal
+    400: "#506680",
+    300: "#6d84a0",
+    200: "#9ab0c5",
+    100: "#c9d5e1",
+    50: "#e4eaf0",
   },
 
   // Accent - Safety Orange
@@ -166,7 +166,7 @@ export const COMPLIANCE_BACKGROUNDS = {
 export const ROLE_COLORS = {
   ADMIN: "#dc2626",
   REVIEWER: "#7c3aed",
-  INSPECTOR: "#2d5c8f",
+  INSPECTOR: "#3c4b5d",
 } as const;
 
 export const ROLE_BACKGROUNDS = {

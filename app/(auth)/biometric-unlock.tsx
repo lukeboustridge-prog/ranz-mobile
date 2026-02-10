@@ -135,7 +135,7 @@ export default function BiometricUnlockScreen() {
         {/* Loading Indicator */}
         {isAuthenticating && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2d5c8f" />
+            <ActivityIndicator size="large" color="#3c4b5d" />
             <Text style={styles.loadingText}>Authenticating...</Text>
           </View>
         )}
@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 36,
-    color: '#2d5c8f',
+    color: '#3c4b5d',
   },
   title: {
     fontSize: 28,
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   primaryButton: {
-    backgroundColor: '#2d5c8f',
+    backgroundColor: '#3c4b5d',
     borderRadius: 8,
     paddingVertical: 14,
     paddingHorizontal: 32,
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   secondaryButtonText: {
-    color: '#2d5c8f',
+    color: '#3c4b5d',
     fontSize: 16,
     fontWeight: '600',
   },

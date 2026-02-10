@@ -4,10 +4,11 @@
  */
 
 import { useEffect, useState } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Platform } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Platform, Image } from "react-native";
 import { useAuthStore } from "../../src/stores/auth-store";
 import { Link, useRouter } from "expo-router";
 import { OfflineIndicator } from "../../src/components/OfflineIndicator";
+import { COLORS } from "../../src/lib/theme";
 import type { LocalReport } from "../../src/types/database";
 
 // SQLite is not supported on web - only import on native
@@ -139,15 +140,19 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Branded Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0] || "Inspector"}</Text>
-          <Text style={styles.subGreeting}>RANZ Roofing Inspection</Text>
+        <View style={styles.headerTop}>
+          <Image
+            source={require("../../assets/icon.png")}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
+          <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0] || "Inspector"}</Text>
       </View>
 
       {/* Offline Indicator - slides down when offline */}
@@ -208,28 +213,31 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8fafc",
   },
   header: {
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 20,
+    backgroundColor: COLORS.primary[500],
+  },
+  headerTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-    backgroundColor: "#2d5c8f",
+    marginBottom: 12,
+  },
+  headerLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
   },
   greeting: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#ffffff",
-  },
-  subGreeting: {
-    fontSize: 14,
-    color: "#94a3b8",
-    marginTop: 2,
   },
   signOutButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    backgroundColor: "rgba(255,255,255,0.15)",
     borderRadius: 6,
   },
   signOutText: {
@@ -272,7 +280,7 @@ const styles = StyleSheet.create({
   },
   newReportButton: {
     marginHorizontal: 20,
-    backgroundColor: "#2d5c8f",
+    backgroundColor: COLORS.primary[500],
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",

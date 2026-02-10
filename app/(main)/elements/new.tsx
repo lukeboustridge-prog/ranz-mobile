@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
   backButton: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 16,
     marginBottom: 12,
   },
@@ -307,8 +307,8 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   typeOptionActive: {
-    backgroundColor: "#2d5c8f",
-    borderColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
+    borderColor: "#3c4b5d",
   },
   typeOptionText: {
     fontSize: 13,
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   saveButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",

@@ -3,18 +3,22 @@
  * Placeholder — accounts are provisioned by RANZ administrators
  */
 
-import { View, Text, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { Link } from "expo-router";
+import { RanzLogo } from "../../src/components/RanzLogo";
+import { COLORS } from "../../src/lib/theme";
 
 export default function SignupScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.logo}>RANZ</Text>
-          <Text style={styles.subtitle}>Roofing Inspection</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+        {/* Branded Header */}
+        <View style={styles.brandHeader}>
+          <RanzLogo size="large" />
+          <Text style={styles.brandSubtitle}>Roofing Inspection</Text>
         </View>
 
+        {/* Content */}
         <View style={styles.form}>
           <Text style={styles.title}>Request Access</Text>
           <Text style={styles.description}>
@@ -31,7 +35,7 @@ export default function SignupScreen() {
             </Link>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -39,53 +43,49 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8fafc",
+    backgroundColor: COLORS.primary[500],
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
-    paddingHorizontal: 24,
   },
-  header: {
+  brandHeader: {
     alignItems: "center",
-    marginBottom: 40,
+    paddingTop: 60,
+    paddingBottom: 32,
   },
-  logo: {
-    fontSize: 48,
-    fontWeight: "bold",
-    color: "#2d5c8f",
-  },
-  subtitle: {
+  brandSubtitle: {
     fontSize: 16,
-    color: "#64748b",
-    marginTop: 4,
+    color: "rgba(255,255,255,0.7)",
+    marginTop: 12,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   form: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     padding: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    paddingTop: 32,
+    flex: 1,
+    minHeight: 300,
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#1e293b",
+    color: COLORS.gray[900],
     marginBottom: 16,
   },
   description: {
     fontSize: 14,
-    color: "#64748b",
+    color: COLORS.gray[500],
     lineHeight: 22,
     marginBottom: 16,
   },
   email: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#2d5c8f",
+    color: COLORS.primary[500],
     textAlign: "center",
     marginBottom: 24,
   },
@@ -95,11 +95,11 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   footerText: {
-    color: "#64748b",
+    color: COLORS.gray[500],
     fontSize: 14,
   },
   link: {
-    color: "#2d5c8f",
+    color: COLORS.primary[500],
     fontSize: 14,
     fontWeight: "600",
   },

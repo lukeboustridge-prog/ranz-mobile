@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
   },
   changeRoleText: {
     fontSize: 14,
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontWeight: "500",
   },
   emptyContainer: {

@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#e2e8f0",
   },
   backLink: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 16,
     marginBottom: 8,
   },
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   backButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   sectionTabActive: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
   },
   sectionTabComplete: {
     borderWidth: 2,
@@ -631,7 +631,7 @@ const styles = StyleSheet.create({
   itemRef: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     marginBottom: 2,
   },
   itemTitle: {

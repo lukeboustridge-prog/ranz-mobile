@@ -10,7 +10,7 @@ export default function Index() {
   // This screen is only briefly visible during the initial redirect.
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color="#2d5c8f" />
+      <ActivityIndicator size="large" color="#3c4b5d" />
     </View>
   );
 }

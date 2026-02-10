@@ -420,7 +420,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   syncButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
   },
   buttonText: {
     color: "#ffffff",

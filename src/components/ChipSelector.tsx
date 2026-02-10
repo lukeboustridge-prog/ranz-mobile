@@ -47,11 +47,11 @@ export function ChipSelector({
         {options.map((option) => {
           const isSelected = value === option.value;
           const backgroundColor = isSelected
-            ? option.color || "#2d5c8f"
+            ? option.color || "#3c4b5d"
             : "#f3f4f6";
           const textColor = isSelected ? "#ffffff" : "#374151";
           const borderColor = isSelected
-            ? option.color || "#2d5c8f"
+            ? option.color || "#3c4b5d"
             : "#e5e7eb";
 
           return (

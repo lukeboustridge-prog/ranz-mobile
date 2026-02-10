@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx eas build:list:*)",
+      "Bash(eas build:list:*)",
+      "Bash(where:*)",
+      "Bash(node_modules/.bin/eas build:list:*)",
+      "Bash(npx eas-cli:*)",
+      "WebFetch(domain:expo.dev)",
+      "WebFetch(domain:job-logs.eascdn.net)",
+      "Bash(node -e \"const d=require\\(''fs''\\).readFileSync\\(''/dev/stdin'',''utf8''\\); const j=JSON.parse\\(d\\); console.log\\(''ERROR:'', JSON.stringify\\(j.error\\)\\); console.log\\(''XCODE_LOGS:'', j.artifacts?.xcodeBuildLogsUrl?.substring\\(0,200\\)\\); j.logFiles?.forEach\\(\\(l,i\\)=>console.log\\(''LOG''+i+'':'', l.substring\\(0,200\\)\\)\\)\")",
+      "Bash(node:*)",
+      "Bash(findstr:*)",
+      "Bash(curl:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.swmansion.com)",
+      "WebFetch(domain:docs.expo.dev)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: re-enable New Architecture and restore plugins for iOS build\n\nReanimated 4.x requires New Architecture — disabling it caused pod\ninstall to fail. expo-sqlite 16.x is fully compatible with New Arch\nin SDK 54, so the original concern was unfounded. Restores\nexpo-background-task and @sentry/react-native/expo plugins that were\ntemporarily removed during debugging.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}

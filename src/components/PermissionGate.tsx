@@ -53,7 +53,7 @@ export function PermissionGate({ children, onClose }: PermissionGateProps) {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="#2d5c8f" />
+        <ActivityIndicator size="large" color="#3c4b5d" />
         <Text style={styles.loadingText}>Checking permissions...</Text>
       </SafeAreaView>
     );
@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   settingsButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 8,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   grantButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 8,

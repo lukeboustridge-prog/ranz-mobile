@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 72,
     fontWeight: "bold",
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     marginBottom: 8,
   },
   subtitle: {
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   button: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,

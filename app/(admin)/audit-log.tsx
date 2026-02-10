@@ -104,7 +104,7 @@ export default function AuditLogScreen() {
       case "SUBMITTED":
         return "#d97706";
       default:
-        return "#2d5c8f";
+        return "#3c4b5d";
     }
   };
 

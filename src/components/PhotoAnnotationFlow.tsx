@@ -186,7 +186,7 @@ export function PhotoAnnotationFlow({
       <View style={styles.imageContainer}>
         {isLoadingAnnotations ? (
           <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#2d5c8f" />
+            <ActivityIndicator size="large" color="#3c4b5d" />
             <Text style={styles.loadingText}>Loading...</Text>
           </View>
         ) : (
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     color: "#fff",
     fontSize: 12,
     fontWeight: "bold",
@@ -380,7 +380,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 80,
     right: 16,
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
     flex: 2,
     paddingVertical: 14,
     borderRadius: 8,
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     alignItems: "center",
   },
   startButtonDisabled: {

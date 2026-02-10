@@ -40,7 +40,7 @@ export default function App() {
   if (isInitializing) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#2d5c8f" />
+        <ActivityIndicator size="large" color="#3c4b5d" />
         <Text style={styles.loadingText}>Initializing...</Text>
         <StatusBar style="auto" />
       </View>

@@ -843,7 +843,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   saveButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
@@ -910,7 +910,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   toolButtonActive: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
   },
   toolButtonText: {
     color: "#fff",

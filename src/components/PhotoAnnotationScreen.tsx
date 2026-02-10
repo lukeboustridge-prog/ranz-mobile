@@ -142,7 +142,7 @@ export function PhotoAnnotationScreen({
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2d5c8f" />
+        <ActivityIndicator size="large" color="#3c4b5d" />
         <Text style={styles.loadingText}>Loading photo...</Text>
       </View>
     );
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   originalCloseText: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 16,
     fontWeight: "600",
   },

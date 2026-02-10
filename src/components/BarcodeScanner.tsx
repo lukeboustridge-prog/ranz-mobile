@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     width: 40,
     height: 40,
-    borderColor: "#2d5c8f",
+    borderColor: "#3c4b5d",
     borderWidth: 4,
   },
   cornerTopLeft: {
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     left: 10,
     right: 10,
     height: 2,
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     top: "50%",
   },
   resultPanel: {
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   resultType: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
   },
   useButton: {
     flex: 2,
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",

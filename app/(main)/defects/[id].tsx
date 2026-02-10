@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   errorButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     paddingTop: 40,
   },
   backButton: {
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     fontSize: 16,
     marginBottom: 12,
   },
@@ -555,8 +555,8 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   elementChipActive: {
-    backgroundColor: "#2d5c8f",
-    borderColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
+    borderColor: "#3c4b5d",
   },
   elementChipText: {
     fontSize: 13,
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   saveButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: "center",

@@ -18,7 +18,7 @@ const ROLE_CONFIG: Record<
 > = {
   INSPECTOR: {
     label: "Inspector",
-    color: "#2d5c8f",
+    color: "#3c4b5d",
     bgColor: "#dbeafe",
   },
   REVIEWER: {

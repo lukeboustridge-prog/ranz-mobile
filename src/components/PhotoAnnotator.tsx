@@ -983,7 +983,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   saveButton: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 6,
@@ -1052,7 +1052,7 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   strokeOptionSelected: {
-    borderColor: "#2d5c8f",
+    borderColor: "#3c4b5d",
   },
   strokePreview: {
     width: 40,
@@ -1090,7 +1090,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   toolButtonActive: {
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
   },
   toolIcon: {
     fontSize: 20,
@@ -1192,7 +1192,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 8,
-    backgroundColor: "#2d5c8f",
+    backgroundColor: "#3c4b5d",
     alignItems: "center",
   },
   modalConfirmText: {
