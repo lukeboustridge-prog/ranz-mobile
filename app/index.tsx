@@ -1,28 +1,18 @@
 /**
  * Index Route
- * Redirects to appropriate screen based on auth state
+ * Shows a loading state while AuthGuard in _layout.tsx handles routing
  */
 
-import { Redirect } from "expo-router";
-import { useAuth } from "@clerk/clerk-expo";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 
 export default function Index() {
-  const { isLoaded, isSignedIn } = useAuth();
-
-  if (!isLoaded) {
-    return (
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#2d5c8f" />
-      </View>
-    );
-  }
-
-  if (isSignedIn) {
-    return <Redirect href="/(main)/home" />;
-  }
-
-  return <Redirect href="/(auth)/login" />;
+  // AuthGuard in _layout.tsx handles all auth-based routing.
+  // This screen is only briefly visible during the initial redirect.
+  return (
+    <View style={styles.container}>
+      <ActivityIndicator size="large" color="#2d5c8f" />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

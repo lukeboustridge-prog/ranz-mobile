@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Platform } from "react-native";
-import { useAuth, useUser } from "@clerk/clerk-expo";
+import { useAuthStore } from "../../src/stores/auth-store";
 import { Link, useRouter } from "expo-router";
 import { OfflineIndicator } from "../../src/components/OfflineIndicator";
 import type { LocalReport } from "../../src/types/database";
@@ -14,8 +14,7 @@ import type { LocalReport } from "../../src/types/database";
 const isNative = Platform.OS !== "web";
 
 export default function HomeScreen() {
-  const { signOut } = useAuth();
-  const { user } = useUser();
+  const { user, logout } = useAuthStore();
   const router = useRouter();
 
   const [reports, setReports] = useState<LocalReport[]>([]);
@@ -43,17 +42,45 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
+    // Load local data first (instant)
     loadData();
+
+    // Then bootstrap sync from server (user is authenticated at this point)
+    if (isNative) {
+      import("../../src/services/sync-service")
+        .then(async ({ initializeSyncEngine }) => {
+          try {
+            await initializeSyncEngine();
+            // Reload local data after sync completes
+            await loadData();
+          } catch (e) {
+            console.warn("[Home] Bootstrap sync failed:", e);
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadData();
-    setIsRefreshing(false);
+    try {
+      if (isNative) {
+        // Sync from server first, then reload local data
+        const { fullSync } = await import("../../src/services/sync-service");
+        await fullSync();
+      }
+      await loadData();
+    } catch (error) {
+      console.error("Refresh failed:", error);
+      // Still reload local data even if sync fails
+      await loadData();
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
   const handleSignOut = async () => {
-    await signOut();
+    await logout();
     router.replace("/(auth)/login");
   };
 
@@ -115,7 +142,7 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Hello, {user?.firstName || "Inspector"}</Text>
+          <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0] || "Inspector"}</Text>
           <Text style={styles.subGreeting}>RANZ Roofing Inspection</Text>
         </View>
         <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
