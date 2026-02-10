@@ -92,8 +92,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               <Text style={styles.retryButtonText}>Try Again</Text>
             </TouchableOpacity>
 
-            {/* Show error details in development */}
-            {(__DEV__ || this.props.showDetails) && this.state.error && (
+            {/* Show error details */}
+            {this.state.error && (
               <ScrollView style={styles.detailsContainer}>
                 <Text style={styles.detailsTitle}>Error Details (Development Only)</Text>
                 <Text style={styles.detailsText}>{this.state.error.message}</Text>
