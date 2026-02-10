@@ -22,6 +22,7 @@ export default function HomeScreen() {
   const [stats, setStats] = useState({ reports: 0, photos: 0, defects: 0, elements: 0, pendingSync: 0, checklists: 0 });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncDebug, setSyncDebug] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
   const loadData = async () => {
@@ -57,6 +58,10 @@ export default function HomeScreen() {
           try {
             const result = await initializeSyncEngine();
             console.log("[Home] Bootstrap result:", JSON.stringify(result));
+            // Show debug info about what was downloaded
+            const dl = result.downloaded || {};
+            const debugMsg = `Sync ${result.success ? "OK" : "FAIL"} | Reports: ${dl.reports ?? 0}, Checklists: ${dl.checklists ?? 0}, Templates: ${dl.templates ?? 0} | ${result.duration}ms`;
+            setSyncDebug(debugMsg);
             if (!result.success && result.errors.length > 0) {
               const errMsg = result.errors.map((e: { code: string; message: string }) => `${e.code}: ${e.message}`).join("; ");
               console.error("[Home] Bootstrap errors:", errMsg);
@@ -187,6 +192,11 @@ export default function HomeScreen() {
         <TouchableOpacity style={styles.errorBanner} onPress={() => setSyncError(null)}>
           <Text style={styles.errorBannerText}>Sync error: {syncError}</Text>
           <Text style={styles.errorDismiss}>Tap to dismiss</Text>
+        </TouchableOpacity>
+      )}
+      {syncDebug && !syncError && (
+        <TouchableOpacity style={styles.debugBanner} onPress={() => setSyncDebug(null)}>
+          <Text style={styles.debugBannerText}>{syncDebug}</Text>
         </TouchableOpacity>
       )}
 
@@ -434,5 +444,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#dc2626",
     marginTop: 4,
+  },
+  debugBanner: {
+    backgroundColor: "#f0fdf4",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  debugBannerText: {
+    fontSize: 11,
+    color: "#166534",
+    textAlign: "center",
   },
 });

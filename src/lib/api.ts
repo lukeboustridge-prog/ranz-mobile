@@ -85,13 +85,17 @@ function handleApiError(error: unknown): ApiError {
 export async function fetchBootstrapData(lastSyncAt?: string): Promise<ApiResponse<BootstrapResponse>> {
   try {
     const params = lastSyncAt ? { lastSyncAt } : {};
+    envLog(`Calling bootstrap: ${config.apiUrl}/api/sync/bootstrap`, params);
     const response = await apiClient.get<ApiResponse<BootstrapResponse>>("/api/sync/bootstrap", { params });
-    return response.data;
+    const data = response.data;
+    envLog(`Bootstrap response: success=${data.success}, reports=${data.data?.recentReports?.length ?? 'N/A'}, user=${data.data?.user?.email ?? 'N/A'}`);
+    return data;
   } catch (error) {
     const apiError = handleApiError(error);
+    envWarn(`Bootstrap failed: ${apiError.status} ${apiError.code} - ${apiError.message}`);
     return {
       success: false,
-      error: apiError.message,
+      error: `${apiError.status} ${apiError.code}: ${apiError.message}`,
     };
   }
 }
