@@ -1370,7 +1370,7 @@ class SyncEngine {
       // sync happens through the report-bundle upload path instead.
       await clearSyncQueue();
 
-      const result = await this.downloadFromServer();
+      const result = await this.downloadFromServer(true); // Always full sync on bootstrap
       this.hasBootstrapped = true;
       return result;
     } finally {
@@ -1382,7 +1382,7 @@ class SyncEngine {
   /**
    * Download data from server
    */
-  private async downloadFromServer(): Promise<SyncResult> {
+  private async downloadFromServer(forceFullSync = false): Promise<SyncResult> {
     const startTime = Date.now();
     const errors: SyncError[] = [];
     let downloadedChecklists = 0;
@@ -1412,7 +1412,9 @@ class SyncEngine {
 
       this.emitProgress("Fetching data from server...", 10);
 
-      const lastSyncAt = await getLastSyncAt();
+      // On bootstrap (forceFullSync), always fetch ALL reports — never use stale lastSyncAt
+      const lastSyncAt = forceFullSync ? null : await getLastSyncAt();
+      console.log(`[Sync] downloadFromServer: forceFullSync=${forceFullSync}, lastSyncAt=${lastSyncAt}`);
 
       const response = await withRetry(
         () => fetchBootstrapData(lastSyncAt || undefined),
@@ -1605,6 +1607,10 @@ class SyncEngine {
 
   async downloadRecentReports(reports: ReportSummary[]): Promise<number> {
     let count = 0;
+    console.log(`[Sync] downloadRecentReports: received ${reports.length} reports from server`);
+    if (reports.length > 0) {
+      console.log(`[Sync] Report IDs: ${reports.map(r => `${r.reportNumber}(${r.id})`).join(', ')}`);
+    }
 
     for (const report of reports) {
       try {
@@ -1663,8 +1669,9 @@ class SyncEngine {
 
         await saveReport(localReport);
         count++;
+        console.log(`[Sync] Saved report ${report.reportNumber} (${report.id}) to SQLite`);
       } catch (error) {
-        console.error(`[Sync] Failed to save report ${report.id}:`, error);
+        console.error(`[Sync] FAILED to save report ${report.reportNumber} (${report.id}):`, error);
       }
     }
 

@@ -32,6 +32,7 @@ import {
   getTokenRemainingSeconds,
 } from '../lib/auth/offline-verify';
 import { loginWithCredentials, logoutFromServer } from '../lib/auth/api';
+import { deleteLastSyncAt } from '../lib/storage';
 import type { JWTPayload, AuthState } from '../lib/auth/types';
 import { AUTH_TIMING } from '../constants/auth';
 
@@ -262,8 +263,10 @@ export const useAuthStore = create<AuthStoreState>()(
           // Ignore errors - we always logout locally
         });
 
-        // Clear all stored auth data
+        // Clear all stored auth data + sync timestamp
+        // (so next login triggers full re-sync, not incremental)
         await clearAllAuthData();
+        await deleteLastSyncAt();
 
         // Reset state
         set({
