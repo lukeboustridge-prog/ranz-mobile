@@ -406,6 +406,11 @@ CREATE TABLE IF NOT EXISTS reports (
   declaration_signed INTEGER NOT NULL DEFAULT 0,
   signed_at TEXT,
 
+  -- Inspector / workflow
+  inspector_id TEXT,
+  submitted_at TEXT,
+  approved_at TEXT,
+
   -- Sync tracking
   sync_status TEXT NOT NULL DEFAULT 'draft',
   created_at TEXT NOT NULL,
@@ -711,12 +716,14 @@ CREATE TABLE IF NOT EXISTS audit_log (
   user_id TEXT NOT NULL,
   user_name TEXT NOT NULL,
   details TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  synced_to_server INTEGER DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON audit_log(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_log_user ON audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_log_synced ON audit_log(synced_to_server);
 `;
 
 // ============================================

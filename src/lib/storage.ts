@@ -12,6 +12,7 @@ const STORAGE_KEYS = {
   USER_ID: "ranz_user_id",
   LAST_SYNC_AT: "ranz_last_sync_at",
   DEVICE_ID: "ranz_device_id",
+  SYNC_SETTINGS: "ranz_sync_settings",
 } as const;
 
 type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS];
@@ -105,6 +106,50 @@ export async function saveLastSyncAt(timestamp: string): Promise<void> {
 
 export async function getLastSyncAt(): Promise<string | null> {
   return getSecureItem(STORAGE_KEYS.LAST_SYNC_AT);
+}
+
+// ============================================
+// SYNC SETTINGS
+// ============================================
+
+export interface SyncSettings {
+  /** Only sync photos over WiFi (for large files) */
+  photosWifiOnly: boolean;
+  /** Size threshold in MB for WiFi-only uploads */
+  wifiOnlyThresholdMb: number;
+  /** Auto-sync when online */
+  autoSyncEnabled: boolean;
+  /** Background sync enabled */
+  backgroundSyncEnabled: boolean;
+}
+
+const DEFAULT_SYNC_SETTINGS: SyncSettings = {
+  photosWifiOnly: true,
+  wifiOnlyThresholdMb: 5, // 5MB threshold
+  autoSyncEnabled: true,
+  backgroundSyncEnabled: true,
+};
+
+export async function getSyncSettings(): Promise<SyncSettings> {
+  try {
+    const stored = await getSecureItem(STORAGE_KEYS.SYNC_SETTINGS);
+    if (stored) {
+      return { ...DEFAULT_SYNC_SETTINGS, ...JSON.parse(stored) };
+    }
+    return DEFAULT_SYNC_SETTINGS;
+  } catch {
+    return DEFAULT_SYNC_SETTINGS;
+  }
+}
+
+export async function saveSyncSettings(settings: Partial<SyncSettings>): Promise<void> {
+  const current = await getSyncSettings();
+  const updated = { ...current, ...settings };
+  await setSecureItem(STORAGE_KEYS.SYNC_SETTINGS, JSON.stringify(updated));
+}
+
+export async function resetSyncSettings(): Promise<void> {
+  await setSecureItem(STORAGE_KEYS.SYNC_SETTINGS, JSON.stringify(DEFAULT_SYNC_SETTINGS));
 }
 
 // ============================================

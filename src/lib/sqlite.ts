@@ -47,21 +47,33 @@ let db: SQLite.SQLiteDatabase | null = null;
  */
 export async function initializeDatabase(): Promise<void> {
   try {
+    console.log("[SQLite] Opening database...");
     db = await SQLite.openDatabaseAsync(DATABASE_NAME);
+    console.log("[SQLite] Database opened");
+
+    // Enable WAL mode for better concurrent read/write performance
+    await db.execAsync("PRAGMA journal_mode = WAL;");
 
     // Check current version and run migrations if needed
     const currentVersion = await getDatabaseVersion();
+    console.log("[SQLite] Current version:", currentVersion);
 
-    if (currentVersion < DATABASE_VERSION) {
+    if (currentVersion === 0) {
+      // Fresh install: create all tables with current schema, skip migrations
+      console.log("[SQLite] Fresh install — creating tables");
+      await db.execAsync(CREATE_TABLES_SQL);
+      console.log("[SQLite] Tables created");
+    } else if (currentVersion < DATABASE_VERSION) {
+      // Existing install: run migrations first, then ensure any new tables exist
       console.log(`[SQLite] Migrating from v${currentVersion} to v${DATABASE_VERSION}`);
       await runMigrations(currentVersion);
+      await db.execAsync(CREATE_TABLES_SQL);
+      console.log("[SQLite] Migration complete");
     }
-
-    // Execute all CREATE TABLE statements
-    await db.execAsync(CREATE_TABLES_SQL);
 
     // Update version
     await setDatabaseVersion(DATABASE_VERSION);
+    console.log("[SQLite] Version set to", DATABASE_VERSION);
 
     // Ensure sync state exists
     await ensureSyncState();
