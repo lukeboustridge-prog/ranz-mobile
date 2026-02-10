@@ -4,7 +4,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from "axios";
-import { getAuthToken } from "./storage";
+import { getToken as getAuthToken } from "./auth/storage";
 import { config, envLog, envWarn } from "../config/environment";
 import type { ApiResponse, BootstrapResponse, Report, ReportSummary } from "../types/shared";
 

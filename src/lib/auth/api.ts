@@ -60,12 +60,20 @@ export async function loginWithCredentials(
       body: JSON.stringify({ email, password }),
     });
 
-    const data = await response.json();
+    let data: Record<string, unknown>;
+    try {
+      data = await response.json();
+    } catch {
+      return {
+        success: false,
+        error: `Server error (${response.status}). Please try again.`,
+      };
+    }
 
     if (!response.ok) {
       return {
         success: false,
-        error: data.message || data.error || 'Login failed',
+        error: (data.message as string) || (data.error as string) || 'Login failed',
       };
     }
 

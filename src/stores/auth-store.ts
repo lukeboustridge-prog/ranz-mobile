@@ -157,14 +157,16 @@ export const useAuthStore = create<AuthStoreState>()(
       // ========================================
 
       loginWithEmailPassword: async (email, password) => {
-        set({ isLoading: true });
+        // NOTE: Do NOT set isLoading here. The global isLoading controls
+        // AuthGuard's loading spinner which would unmount the login screen,
+        // losing form state and error messages. The login screen has its
+        // own local isLoading state for button/UI feedback.
 
         try {
           // Call API to get token
           const response = await loginWithCredentials(email, password);
 
           if (!response.success || !response.token) {
-            set({ isLoading: false });
             return {
               success: false,
               error: response.error || 'Login failed',
@@ -174,7 +176,6 @@ export const useAuthStore = create<AuthStoreState>()(
           // Verify token signature and expiry
           const payload = await verifyTokenOffline(response.token);
           if (!payload) {
-            set({ isLoading: false });
             return {
               success: false,
               error: 'Invalid token received',
@@ -193,11 +194,10 @@ export const useAuthStore = create<AuthStoreState>()(
           const now = Date.now();
           await saveLastOnlineValidation(now);
 
-          // Update state
+          // Update state — setting isAuthenticated triggers AuthGuard redirect
           set({
             user: payload,
             isAuthenticated: true,
-            isLoading: false,
             lastOnlineValidation: now,
             tokenRemainingSeconds: getTokenRemainingSeconds(response.token),
           });
@@ -208,7 +208,6 @@ export const useAuthStore = create<AuthStoreState>()(
           };
         } catch (error) {
           console.error('[AuthStore] Login failed:', error);
-          set({ isLoading: false });
           return {
             success: false,
             error: error instanceof Error ? error.message : 'Login failed',
@@ -217,13 +216,12 @@ export const useAuthStore = create<AuthStoreState>()(
       },
 
       loginWithToken: async (token) => {
-        set({ isLoading: true });
+        // NOTE: Do NOT set isLoading here — same reason as loginWithEmailPassword.
 
         try {
           // Verify token signature and expiry
           const payload = await verifyTokenOffline(token);
           if (!payload) {
-            set({ isLoading: false });
             return false;
           }
 
@@ -243,7 +241,6 @@ export const useAuthStore = create<AuthStoreState>()(
           set({
             user: payload,
             isAuthenticated: true,
-            isLoading: false,
             lastOnlineValidation: now,
             tokenRemainingSeconds: getTokenRemainingSeconds(token),
           });
@@ -251,7 +248,6 @@ export const useAuthStore = create<AuthStoreState>()(
           return true;
         } catch (error) {
           console.error('[AuthStore] Token login failed:', error);
-          set({ isLoading: false });
           return false;
         }
       },
@@ -336,21 +332,33 @@ export const useAuthStore = create<AuthStoreState>()(
         set({ isLoading: true });
 
         try {
-          // Load persisted biometrics preference
-          const biometricsEnabled = await getBiometricsEnabled();
-          const lastOnlineValidation = await getLastOnlineValidation();
+          // Race initialization against a timeout to prevent infinite spinner
+          const initWork = async () => {
+            // Load persisted biometrics preference
+            const biometricsEnabled = await getBiometricsEnabled();
+            const lastOnlineValidation = await getLastOnlineValidation();
 
-          set({ biometricsEnabled, lastOnlineValidation });
+            set({ biometricsEnabled, lastOnlineValidation });
 
-          // Try to validate existing session
-          await get().validateSession();
+            // Try to validate existing session
+            await get().validateSession();
+          };
+
+          await Promise.race([
+            initWork(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Auth init timeout')), 10_000)
+            ),
+          ]);
         } catch (error) {
           console.error('[AuthStore] Initialization failed:', error);
           set({
             user: null,
             isAuthenticated: false,
-            isLoading: false,
           });
+        } finally {
+          // Always clear loading — even if init hangs or times out
+          set({ isLoading: false });
         }
       },
 

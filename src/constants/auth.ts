@@ -12,7 +12,7 @@ import type { AuthConfig } from '../lib/auth/types';
  * These values should match the web app configuration
  */
 export const AUTH_CONFIG: AuthConfig = {
-  apiBaseUrl: process.env.EXPO_PUBLIC_API_URL || 'https://portal.ranz.org.nz',
+  apiBaseUrl: process.env.EXPO_PUBLIC_API_URL || 'https://ranz-roofing-report.vercel.app',
   jwtIssuer: 'https://portal.ranz.org.nz',
   jwtAudience: ['portal.ranz.org.nz', 'reports.ranz.org.nz'],
   accessTokenLifetime: 8 * 60 * 60, // 8 hours in seconds
@@ -36,13 +36,13 @@ export const AUTH_CONFIG: AuthConfig = {
  * Then publish a new app version.
  */
 export const JWT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1wP16MQhv2lOO5ks9olB
-V9kWEDgO0DhyEuJsT/U2qla3dWVOGkZCeoxM2XvsH/63zUxsef0WmBV559U+KUlq
-ndi2YhES/KZXeQ19+trhjApcN1YtHMY6I5ENhiq6zv+D9RCx3t0v8uZgB9098bgH
-5c3DpGatqLotOg45H3i0Qjio8F0Bl6n+QtezNOoFUke7MxZGonfNVwpT1pLiO+g4
-cfil1NFHec2CHYgsUTm1WhMEnVtpUkUHZXAQi4SXQHgPMUr/D+FyfEIdMVnxBUIv
-QqEfvgSXVGpjqOHEAkq7Fgm+YzuQPw6+lLWynQ9iC7Fj9pWLVtUOHMeG+UnQ4JwP
-zwIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAo+5QwA921rkPRW2KDyew
+AZT0aKKA6WwmbHY2cL8UIWgwA0Zor5dzESJHi0SPWx4ePXVFitj5/ESEZoEbW89B
+ErEqptZ0tWBGe8a/nVAEzy7HB66Z30c+/RADuZ+qk/ElLacFSmdYwpC+xgCifluA
+pj7n9jVlGm1Cig9oebcDaZgxPR/kG0LnNvy+v1Yv26hKv34YzNtWWFeXoaBSECwV
+nUbrK/i9Ej/M9sE2zOlzqc3nTkausguDIcPWoCQh1+eSfB1y3vLpYyIzs3ExAJVc
+F14sX/MOd8cyQcU9Pjx1IrUHarLYoUL6QQlcJMRqQ+QwUG4PpI1dw3iQuTvzhVhc
+1QIDAQAB
 -----END PUBLIC KEY-----`;
 
 /**

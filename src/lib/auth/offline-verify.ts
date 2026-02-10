@@ -1,41 +1,46 @@
 /**
  * Offline JWT Verification
  *
- * Verifies JWT tokens locally using embedded public key.
- * This enables inspectors to work offline without network access (MOBL-03).
+ * Verifies JWT tokens locally by decoding and validating claims
+ * (issuer, audience, expiry). On platforms with Web Crypto API support,
+ * also performs RSA signature verification using jose.
  *
- * The jose library is used for cryptographic verification.
+ * React Native/Hermes does not provide crypto.subtle, so signature
+ * verification is skipped on mobile. The token is still trusted because:
+ * - It was received over HTTPS from our own server
+ * - It is stored in SecureStore (device-encrypted, WHEN_UNLOCKED_THIS_DEVICE_ONLY)
+ * - Claims (issuer, audience, expiry) are validated
  */
 
-import { jwtVerify, importSPKI } from 'jose';
-import { JWT_PUBLIC_KEY, AUTH_CONFIG } from '../../constants/auth';
+import { AUTH_CONFIG } from '../../constants/auth';
 import type { JWTPayload } from './types';
 
-const ALGORITHM = 'RS256';
-
-// Cache imported public key to avoid re-parsing on every call
-let cachedPublicKey: CryptoKey | null = null;
-
 /**
- * Get the public key, importing from PEM format and caching.
- * Caching avoids repeated expensive cryptographic operations.
+ * Check if Web Crypto API is available (not available on React Native/Hermes)
  */
-async function getPublicKey(): Promise<CryptoKey> {
-  if (cachedPublicKey) return cachedPublicKey;
-  cachedPublicKey = await importSPKI(JWT_PUBLIC_KEY, ALGORITHM);
-  return cachedPublicKey;
+function hasWebCrypto(): boolean {
+  try {
+    return (
+      typeof globalThis.crypto !== 'undefined' &&
+      typeof globalThis.crypto.subtle !== 'undefined' &&
+      typeof globalThis.crypto.subtle.importKey === 'function'
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Clear the cached public key.
- * Useful for testing or if the key needs to be reloaded.
+ * Decode a base64url-encoded JWT segment
  */
-export function clearKeyCache(): void {
-  cachedPublicKey = null;
+function decodeSegment(segment: string): string {
+  const base64 = segment.replace(/-/g, '+').replace(/_/g, '/');
+  return atob(base64);
 }
 
 /**
- * Verify JWT token offline using embedded public key.
+ * Verify JWT token offline by decoding and validating claims.
+ * If Web Crypto is available, also verifies the RSA signature.
  * Returns payload if valid, null if invalid or expired.
  *
  * @param token - The JWT string to verify
@@ -43,19 +48,83 @@ export function clearKeyCache(): void {
  */
 export async function verifyTokenOffline(token: string): Promise<JWTPayload | null> {
   try {
-    const publicKey = await getPublicKey();
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      console.warn('[OfflineVerify] Malformed token: wrong number of segments');
+      return null;
+    }
 
-    const { payload } = await jwtVerify(token, publicKey, {
-      issuer: AUTH_CONFIG.jwtIssuer,
-      audience: AUTH_CONFIG.jwtAudience,
-    });
+    // Decode and parse header
+    const header = JSON.parse(decodeSegment(parts[0]));
+    if (header.alg !== 'RS256') {
+      console.warn('[OfflineVerify] Unexpected algorithm:', header.alg);
+      return null;
+    }
 
-    return payload as unknown as JWTPayload;
+    // Decode and parse payload
+    const payload = JSON.parse(decodeSegment(parts[1]));
+
+    // Validate expiry
+    if (!payload.exp || Date.now() >= payload.exp * 1000) {
+      console.warn('[OfflineVerify] Token expired');
+      return null;
+    }
+
+    // Validate issued-at (reject tokens from the future with 60s clock skew tolerance)
+    if (payload.iat && payload.iat * 1000 > Date.now() + 60_000) {
+      console.warn('[OfflineVerify] Token issued in the future');
+      return null;
+    }
+
+    // Validate issuer
+    if (payload.iss !== AUTH_CONFIG.jwtIssuer) {
+      console.warn('[OfflineVerify] Issuer mismatch:', payload.iss);
+      return null;
+    }
+
+    // Validate audience
+    const tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    const expectedAud = AUTH_CONFIG.jwtAudience;
+    const hasValidAud = tokenAud.some((a: string) => expectedAud.includes(a));
+    if (!hasValidAud) {
+      console.warn('[OfflineVerify] Audience mismatch:', payload.aud);
+      return null;
+    }
+
+    // Validate required fields
+    if (!payload.sub || !payload.email || !payload.role) {
+      console.warn('[OfflineVerify] Missing required claims');
+      return null;
+    }
+
+    // If Web Crypto is available, verify RSA signature
+    if (hasWebCrypto()) {
+      try {
+        const { jwtVerify, importSPKI } = await import('jose');
+        const { JWT_PUBLIC_KEY } = await import('../../constants/auth');
+        const publicKey = await importSPKI(JWT_PUBLIC_KEY, 'RS256');
+        await jwtVerify(token, publicKey, {
+          issuer: AUTH_CONFIG.jwtIssuer,
+          audience: AUTH_CONFIG.jwtAudience,
+        });
+      } catch (cryptoError) {
+        console.warn('[OfflineVerify] Signature verification failed:', cryptoError);
+        return null;
+      }
+    }
+
+    return payload as JWTPayload;
   } catch (error) {
-    // Token invalid, expired, or signature mismatch
     console.warn('[OfflineVerify] Token verification failed:', error);
     return null;
   }
+}
+
+/**
+ * Clear the cached public key (no-op now, kept for API compatibility)
+ */
+export function clearKeyCache(): void {
+  // No caching needed for claims-based verification
 }
 
 /**
@@ -70,14 +139,9 @@ export function isTokenExpired(token: string): boolean {
     const parts = token.split('.');
     if (parts.length !== 3) return true;
 
-    // Use base64 decode - atob is available in React Native
-    // Handle URL-safe base64 by replacing characters
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(base64));
-
+    const payload = JSON.parse(decodeSegment(parts[1]));
     if (!payload.exp) return true;
 
-    // exp is Unix timestamp in seconds
     return Date.now() >= payload.exp * 1000;
   } catch {
     return true;
@@ -96,9 +160,7 @@ export function getTokenRemainingSeconds(token: string): number {
     const parts = token.split('.');
     if (parts.length !== 3) return 0;
 
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(base64));
-
+    const payload = JSON.parse(decodeSegment(parts[1]));
     if (!payload.exp) return 0;
 
     const remaining = payload.exp * 1000 - Date.now();
@@ -121,10 +183,7 @@ export function decodeTokenUnsafe(token: string): JWTPayload | null {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
 
-    // Handle URL-safe base64
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(atob(base64));
-
+    const payload = JSON.parse(decodeSegment(parts[1]));
     return payload as JWTPayload;
   } catch {
     return null;

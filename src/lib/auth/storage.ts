@@ -33,13 +33,34 @@ const STORAGE_OPTIONS: SecureStore.SecureStoreOptions = {
 // LOW-LEVEL HELPERS (internal use)
 // ============================================
 
+/** Timeout for SecureStore operations (5 seconds) */
+const SECURE_STORE_TIMEOUT_MS = 5_000;
+
 /**
- * Set item in secure storage with proper error handling
+ * Race a promise against a timeout to prevent hanging
+ */
+function withTimeout<T>(promise: Promise<T>, fallback: T, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) =>
+      setTimeout(() => {
+        console.warn(`[AuthStorage] ${label} timed out after ${SECURE_STORE_TIMEOUT_MS}ms`);
+        resolve(fallback);
+      }, SECURE_STORE_TIMEOUT_MS)
+    ),
+  ]);
+}
+
+/**
+ * Set item in secure storage with proper error handling and timeout
  */
 async function setSecureItem(key: StorageKey, value: string): Promise<boolean> {
   try {
-    await SecureStore.setItemAsync(key, value, STORAGE_OPTIONS);
-    return true;
+    return await withTimeout(
+      SecureStore.setItemAsync(key, value, STORAGE_OPTIONS).then(() => true),
+      false,
+      `setItem(${key})`
+    );
   } catch (error) {
     console.error(`[AuthStorage] Failed to save ${key}:`, error);
     return false;
@@ -47,11 +68,15 @@ async function setSecureItem(key: StorageKey, value: string): Promise<boolean> {
 }
 
 /**
- * Get item from secure storage with proper error handling
+ * Get item from secure storage with proper error handling and timeout
  */
 async function getSecureItem(key: StorageKey): Promise<string | null> {
   try {
-    return await SecureStore.getItemAsync(key, STORAGE_OPTIONS);
+    return await withTimeout(
+      SecureStore.getItemAsync(key, STORAGE_OPTIONS),
+      null,
+      `getItem(${key})`
+    );
   } catch (error) {
     console.error(`[AuthStorage] Failed to get ${key}:`, error);
     return null;
@@ -59,12 +84,15 @@ async function getSecureItem(key: StorageKey): Promise<string | null> {
 }
 
 /**
- * Delete item from secure storage with proper error handling
+ * Delete item from secure storage with proper error handling and timeout
  */
 async function deleteSecureItem(key: StorageKey): Promise<boolean> {
   try {
-    await SecureStore.deleteItemAsync(key, STORAGE_OPTIONS);
-    return true;
+    return await withTimeout(
+      SecureStore.deleteItemAsync(key, STORAGE_OPTIONS).then(() => true),
+      false,
+      `deleteItem(${key})`
+    );
   } catch (error) {
     console.error(`[AuthStorage] Failed to delete ${key}:`, error);
     return false;
