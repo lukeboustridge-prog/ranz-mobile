@@ -302,9 +302,13 @@ export async function saveComplianceAssessment(
  */
 export async function checkApiHealth(): Promise<boolean> {
   try {
+    envLog(`Health check: ${config.apiUrl}/api/health`);
     const response = await apiClient.get("/api/health", { timeout: 5000 });
+    envLog(`Health check result: ${response.status}`);
     return response.status === 200;
-  } catch {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    envWarn(`Health check failed: ${msg}`);
     return false;
   }
 }

@@ -340,12 +340,17 @@ class SyncEngine {
       // Check network status
       const isOnline = await checkApiHealth();
       if (!isOnline) {
+        console.warn("[Sync] Health check failed in fullSync — treating as offline");
         this.emitProgress("Offline - sync skipped", 100);
         return {
-          success: true,
+          success: false,
           downloaded,
           uploaded,
-          errors: [],
+          errors: [{
+            code: "HEALTH_CHECK_FAILED",
+            message: "Server unreachable — check network or API URL",
+            retryable: true,
+          }],
           duration: Date.now() - startTime,
           timestamp: new Date().toISOString(),
         };
@@ -1389,12 +1394,17 @@ class SyncEngine {
 
       const isOnline = await checkApiHealth();
       if (!isOnline) {
+        console.warn("[Sync] Health check failed — treating as offline");
         this.emitProgress("Offline - using cached data", 100);
         return {
-          success: true,
+          success: false,
           downloaded: { checklists: 0, templates: 0, reports: 0 },
           uploaded: { reports: 0, photos: 0, defects: 0, elements: 0 },
-          errors: [],
+          errors: [{
+            code: "HEALTH_CHECK_FAILED",
+            message: "Server unreachable — check network or API URL",
+            retryable: true,
+          }],
           duration: Date.now() - startTime,
           timestamp: new Date().toISOString(),
         };

@@ -277,8 +277,9 @@ export async function saveReport(report: LocalReport): Promise<void> {
       client_name, client_email, client_phone,
       scope_of_works_json, methodology_json, findings_json, conclusions_json, recommendations_json,
       declaration_signed, signed_at,
+      inspector_id, submitted_at, approved_at,
       sync_status, created_at, updated_at, synced_at, last_sync_error
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       report.id,
       report.reportNumber,
@@ -306,6 +307,9 @@ export async function saveReport(report: LocalReport): Promise<void> {
       report.recommendationsJson,
       report.declarationSigned ? 1 : 0,
       report.signedAt,
+      report.inspectorId,
+      report.submittedAt,
+      report.approvedAt,
       report.syncStatus,
       report.createdAt,
       report.updatedAt,
