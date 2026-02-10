@@ -29,6 +29,7 @@
       },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "preview",
+        "EXPO_PUBLIC_API_URL": "https://ranz-roofing-report.vercel.app",
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       },
       "channel": "preview"
@@ -42,7 +43,8 @@
         "distribution": "store"
       },
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "production"
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_API_URL": "https://ranz-roofing-report.vercel.app"
       },
       "channel": "production"
     }

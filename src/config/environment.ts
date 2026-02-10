@@ -34,13 +34,13 @@ const environmentConfigs: Record<Environment, Omit<EnvironmentConfig, "environme
     enableDevTools: true,
   },
   preview: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://preview.reports.ranz.org.nz",
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://ranz-roofing-report.vercel.app",
     sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || null,
     enableLogs: true, // Useful for debugging preview builds
     enableDevTools: false,
   },
   production: {
-    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://reports.ranz.org.nz",
+    apiUrl: process.env.EXPO_PUBLIC_API_URL || "https://ranz-roofing-report.vercel.app",
     sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN || null,
     enableLogs: false,
     enableDevTools: false,
