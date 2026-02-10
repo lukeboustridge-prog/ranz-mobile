@@ -9,13 +9,12 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
-  Dimensions,
-  ScrollView,
   Modal,
   FlatList,
 } from "react-native";
 import { CameraView, CameraType, FlashMode } from "expo-camera";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import {
   photoService,
   startLocationTracking,
@@ -29,8 +28,6 @@ import {
   isApproximateLocation,
   formatGPSAccuracy,
 } from "../lib/location-utils";
-
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
 export interface RoofElementOption {
   id: string;
@@ -77,6 +74,12 @@ const ELEMENT_TYPE_LABELS: Record<ElementType, string> = {
   [ElementType.OTHER]: "Other",
 };
 
+const FLASH_LABELS: Record<string, string> = {
+  on: "ON",
+  off: "OFF",
+  auto: "AUTO",
+};
+
 export function CameraCapture({
   reportId,
   defectId,
@@ -87,6 +90,7 @@ export function CameraCapture({
   onClose,
 }: CameraCaptureProps) {
   const cameraRef = useRef<CameraView>(null);
+  const insets = useSafeAreaInsets();
   const [facing, setFacing] = useState<CameraType>("back");
   const [flash, setFlash] = useState<FlashMode>("auto");
   const [selectedType, setSelectedType] = useState<PhotoType>(PhotoType.OVERVIEW);
@@ -94,6 +98,7 @@ export function CameraCapture({
   const [selectedElementId, setSelectedElementId] = useState<string | null>(initialElementId || null);
   const [showElementPicker, setShowElementPicker] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [photoCount, setPhotoCount] = useState(0);
   const [gpsStatus, setGpsStatus] = useState<{ accuracy: number; status: "none" | "good" | "fair" | "poor" }>({ accuracy: 999, status: "none" });
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [captureStatus, setCaptureStatus] = useState<string>("");
@@ -134,6 +139,7 @@ export function CameraCapture({
 
     setIsCapturing(true);
     setCaptureStatus("Capturing...");
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     // Validate location if property location is provided
     if (propertyLocation && location) {
@@ -162,8 +168,10 @@ export function CameraCapture({
       );
 
       if (result.success && result.metadata) {
+        setPhotoCount((prev) => prev + 1);
         onCapture(result.metadata.id, selectedQuickTag || undefined, selectedElementId || undefined);
         setCaptureStatus("Photo captured!");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // Auto-advance to next photo type
         const currentIndex = PHOTO_TYPES.findIndex((t) => t.type === selectedType);
@@ -193,6 +201,10 @@ export function CameraCapture({
     setFlash((prev) => (prev === "off" ? "on" : prev === "on" ? "auto" : "off"));
   };
 
+  const toggleFacing = () => {
+    setFacing((prev) => (prev === "back" ? "front" : "back"));
+  };
+
   const getGpsColor = () => {
     switch (gpsStatus.status) {
       case "good":
@@ -206,28 +218,29 @@ export function CameraCapture({
     }
   };
 
-  const getFlashIcon = () => {
-    switch (flash) {
-      case "on":
-        return "⚡";
-      case "off":
-        return "⚡̶";
-      default:
-        return "⚡A";
-    }
-  };
-
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      {/* Camera fills the background — no children so it doesn't swallow touches */}
       <CameraView
         ref={cameraRef}
-        style={styles.camera}
+        style={StyleSheet.absoluteFillObject}
         facing={facing}
         flash={flash}
-      >
+      />
+
+      {/* All UI overlays rendered OUTSIDE CameraView so touches work reliably */}
+      <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+        {/* Grid Overlay (non-interactive) */}
+        <View style={styles.gridOverlay} pointerEvents="none">
+          <View style={styles.gridHorizontal1} />
+          <View style={styles.gridHorizontal2} />
+          <View style={styles.gridVertical1} />
+          <View style={styles.gridVertical2} />
+        </View>
+
         {/* Top Bar */}
-        <View style={styles.topBar}>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+        <View style={[styles.topBar, { paddingTop: insets.top + 8 }]}>
+          <TouchableOpacity style={styles.topBarButton} onPress={onClose}>
             <Text style={styles.closeButtonText}>✕</Text>
           </TouchableOpacity>
 
@@ -241,22 +254,15 @@ export function CameraCapture({
             )}
           </View>
 
-          <TouchableOpacity style={styles.flashButton} onPress={toggleFlash}>
-            <Text style={styles.flashButtonText}>{getFlashIcon()}</Text>
+          <TouchableOpacity style={styles.topBarButton} onPress={toggleFlash}>
+            <Text style={styles.flashLabelIcon}>⚡</Text>
+            <Text style={styles.flashLabelText}>{FLASH_LABELS[flash] || "AUTO"}</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Grid Overlay */}
-        <View style={styles.gridOverlay}>
-          <View style={styles.gridHorizontal1} />
-          <View style={styles.gridHorizontal2} />
-          <View style={styles.gridVertical1} />
-          <View style={styles.gridVertical2} />
-        </View>
-
-        {/* GPS Coordinates Overlay */}
+        {/* GPS Coordinates Overlay — positioned below top bar */}
         {location && (
-          <View style={styles.coordinatesOverlay}>
+          <View style={[styles.coordinatesOverlay, { top: insets.top + 64 }]}>
             <Text style={styles.coordinatesText}>
               {location.lat.toFixed(6)}, {location.lng.toFixed(6)}
             </Text>
@@ -275,13 +281,13 @@ export function CameraCapture({
 
         {/* Location Warning Overlay */}
         {locationWarning && (
-          <View style={styles.locationWarningOverlay}>
+          <View style={[styles.locationWarningOverlay, { top: insets.top + 100 }]}>
             <Text style={styles.locationWarningText}>{locationWarning}</Text>
           </View>
         )}
 
         {/* Bottom Controls */}
-        <View style={styles.bottomControls}>
+        <View style={[styles.bottomControls, { paddingBottom: Math.max(insets.bottom, 20) + 16 }]}>
           {/* Element Selector (if elements available) */}
           {roofElements.length > 0 && (
             <TouchableOpacity
@@ -352,9 +358,13 @@ export function CameraCapture({
             {PHOTO_TYPES.find((t) => t.type === selectedType)?.hint}
           </Text>
 
-          {/* Capture Button */}
+          {/* Capture Row: flip camera | shutter | photo count */}
           <View style={styles.captureRow}>
-            <View style={styles.spacer} />
+            <View style={styles.captureRowSide}>
+              <TouchableOpacity style={styles.flipButton} onPress={toggleFacing}>
+                <Text style={styles.flipButtonText}>↻</Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               style={[styles.captureButton, isCapturing && styles.captureButtonDisabled]}
@@ -364,57 +374,63 @@ export function CameraCapture({
               <View style={styles.captureButtonInner} />
             </TouchableOpacity>
 
-            <View style={styles.spacer} />
-          </View>
-        </View>
-
-        {/* Element Picker Modal */}
-        <Modal
-          visible={showElementPicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowElementPicker(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Roof Element</Text>
-                <TouchableOpacity onPress={() => setShowElementPicker(false)}>
-                  <Text style={styles.modalClose}>✕</Text>
-                </TouchableOpacity>
-              </View>
-              <FlatList
-                data={[{ id: null, elementType: null, location: "None" }, ...roofElements]}
-                keyExtractor={(item) => item.id || "none"}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.elementOption,
-                      selectedElementId === item.id && styles.elementOptionSelected,
-                    ]}
-                    onPress={() => {
-                      setSelectedElementId(item.id);
-                      setShowElementPicker(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.elementOptionText,
-                        selectedElementId === item.id && styles.elementOptionTextSelected,
-                      ]}
-                    >
-                      {item.elementType
-                        ? `${ELEMENT_TYPE_LABELS[item.elementType]} - ${item.location}`
-                        : "None (General Photo)"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              />
+            <View style={styles.captureRowSide}>
+              {photoCount > 0 && (
+                <View style={styles.photoCountBadge}>
+                  <Text style={styles.photoCountText}>{photoCount}</Text>
+                </View>
+              )}
             </View>
           </View>
-        </Modal>
-      </CameraView>
-    </SafeAreaView>
+        </View>
+      </View>
+
+      {/* Element Picker Modal — outside both camera and overlay views */}
+      <Modal
+        visible={showElementPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowElementPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Roof Element</Text>
+              <TouchableOpacity onPress={() => setShowElementPicker(false)}>
+                <Text style={styles.modalClose}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList
+              data={[{ id: null, elementType: null, location: "None" }, ...roofElements]}
+              keyExtractor={(item) => item.id || "none"}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.elementOption,
+                    selectedElementId === item.id && styles.elementOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedElementId(item.id);
+                    setShowElementPicker(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.elementOptionText,
+                      selectedElementId === item.id && styles.elementOptionTextSelected,
+                    ]}
+                  >
+                    {item.elementType
+                      ? `${ELEMENT_TYPE_LABELS[item.elementType]} - ${item.location}`
+                      : "None (General Photo)"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
@@ -423,27 +439,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  camera: {
-    flex: 1,
-  },
   topBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingHorizontal: 12,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  topBarButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
   },
   closeButtonText: {
     color: "#fff",
-    fontSize: 20,
+    fontSize: 22,
+    fontWeight: "300",
+  },
+  flashLabelIcon: {
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  flashLabelText: {
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   gpsContainer: {
     flexDirection: "row",
@@ -473,18 +496,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderRadius: 2,
-  },
-  flashButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  flashButtonText: {
-    color: "#fff",
-    fontSize: 16,
   },
   gridOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -523,7 +534,6 @@ const styles = StyleSheet.create({
   },
   coordinatesOverlay: {
     position: "absolute",
-    bottom: 200,
     left: 16,
     backgroundColor: "rgba(0,0,0,0.5)",
     paddingHorizontal: 8,
@@ -558,7 +568,6 @@ const styles = StyleSheet.create({
   },
   locationWarningOverlay: {
     position: "absolute",
-    top: 80,
     left: 16,
     right: 16,
     backgroundColor: "rgba(234,88,12,0.9)",
@@ -578,7 +587,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: 40,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   typeSelector: {
@@ -616,8 +624,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  spacer: {
+  captureRowSide: {
     flex: 1,
+    alignItems: "center",
   },
   captureButton: {
     width: 72,
@@ -637,6 +646,33 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: "#fff",
+  },
+  flipButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  flipButtonText: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "300",
+  },
+  photoCountBadge: {
+    minWidth: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 8,
+  },
+  photoCountText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "700",
   },
   // Element Selector
   elementSelector: {
