@@ -183,11 +183,16 @@ export async function getOrCreateDeviceId(): Promise<string> {
 // CLEAR ALL AUTH DATA
 // ============================================
 
+export async function deleteLastSyncAt(): Promise<void> {
+  await deleteSecureItem(STORAGE_KEYS.LAST_SYNC_AT);
+}
+
 export async function clearAllAuthData(): Promise<void> {
   await Promise.all([
     deleteAuthToken(),
     deleteRefreshToken(),
     deleteUserId(),
+    deleteLastSyncAt(),
   ]);
 }
 

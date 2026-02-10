@@ -1474,9 +1474,14 @@ class SyncEngine {
         });
       }
 
-      // Save sync timestamp
+      // Save sync timestamp only if no download errors occurred
+      // (prevents stale lastSyncAt from hiding reports on future syncs)
       this.emitProgress("Finalizing sync...", 95);
-      await saveLastSyncAt(data.lastSyncAt);
+      if (errors.length === 0) {
+        await saveLastSyncAt(data.lastSyncAt);
+      } else {
+        console.warn(`[Sync] Skipping lastSyncAt save — ${errors.length} download error(s)`);
+      }
       await updateDbSyncState({ lastBootstrapAt: new Date().toISOString() });
 
       this.emitProgress("Download complete!", 100);
