@@ -128,6 +128,7 @@ class SyncEngine {
   private syncCompleteCallback: SyncCompleteCallback | null = null;
   private isSyncing: boolean = false;
   private isOnline: boolean = false;
+  private hasBootstrapped: boolean = false;
   private autoSyncTimer: ReturnType<typeof setInterval> | null = null;
   private networkUnsubscribe: (() => void) | null = null;
 
@@ -206,8 +207,8 @@ class SyncEngine {
 
       console.log(`[Sync] Network state changed: ${this.isOnline ? "online" : "offline"}`);
 
-      // Trigger sync when coming back online
-      if (!wasOnline && this.isOnline) {
+      // Only trigger sync on reconnect AFTER initial bootstrap has run
+      if (!wasOnline && this.isOnline && this.hasBootstrapped) {
         console.log("[Sync] Network restored - triggering sync");
         this.syncPendingChanges().catch(console.error);
       }
@@ -1344,19 +1345,29 @@ class SyncEngine {
    * Bootstrap - Full initial sync from server
    */
   async bootstrap(): Promise<SyncResult> {
+    // Bootstrap takes priority — wait briefly for any in-progress sync to finish
     if (this.isSyncing) {
-      return this.createErrorResult("SYNC_IN_PROGRESS", "Sync already in progress");
+      console.log("[Sync] Bootstrap waiting for in-progress sync to finish...");
+      for (let i = 0; i < 10; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        if (!this.isSyncing) break;
+      }
+      if (this.isSyncing) {
+        console.warn("[Sync] Bootstrap forcing past in-progress sync");
+        this.isSyncing = false;
+      }
     }
 
     this.isSyncing = true;
-    const startTime = Date.now();
 
     try {
       // Clear stale sync queue items — the queue is not consumed;
       // sync happens through the report-bundle upload path instead.
       await clearSyncQueue();
 
-      return await this.downloadFromServer();
+      const result = await this.downloadFromServer();
+      this.hasBootstrapped = true;
+      return result;
     } finally {
       this.isSyncing = false;
       await this.notifyStatusChange();
