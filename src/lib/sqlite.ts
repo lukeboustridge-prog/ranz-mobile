@@ -8,6 +8,7 @@
 
 import * as SQLite from "expo-sqlite";
 import * as Crypto from "expo-crypto";
+import * as FileSystem from "expo-file-system/legacy";
 
 // ============================================
 // SYNC RETRY CONSTANTS
@@ -622,7 +623,7 @@ export async function getPhotosForDefect(defectId: string): Promise<LocalPhoto[]
 export async function getPendingUploadPhotos(): Promise<LocalPhoto[]> {
   const database = getDatabase();
   const results = await database.getAllAsync<Record<string, unknown>>(
-    "SELECT * FROM photos WHERE sync_status IN ('captured', 'processing') ORDER BY created_at ASC"
+    "SELECT * FROM photos WHERE sync_status IN ('captured', 'processing', 'pending') AND uploaded_url IS NULL ORDER BY created_at ASC"
   );
 
   return results.map(mapPhotoRow);
@@ -645,7 +646,39 @@ export async function updatePhotoSyncStatus(
 
 export async function deletePhoto(id: string): Promise<void> {
   const database = getDatabase();
+
+  // Fetch file paths before deleting DB row
+  const row = await database.getFirstAsync<Record<string, unknown>>(
+    "SELECT local_uri, thumbnail_uri, annotated_uri, measured_uri FROM photos WHERE id = ?",
+    [id]
+  );
+
   await database.runAsync("DELETE FROM photos WHERE id = ?", [id]);
+
+  // Clean up physical files (non-blocking — don't fail delete if file cleanup fails)
+  if (row) {
+    const uris = [
+      row.local_uri as string | null,
+      row.thumbnail_uri as string | null,
+      row.annotated_uri as string | null,
+      row.measured_uri as string | null,
+    ];
+    // Also clean up the evidence original
+    if (row.local_uri) {
+      const origUri = (row.local_uri as string).replace('/photos/', '/evidence/originals/orig_');
+      uris.push(origUri);
+    }
+    for (const uri of uris) {
+      if (uri) {
+        try {
+          const info = await FileSystem.getInfoAsync(uri);
+          if (info.exists) await FileSystem.deleteAsync(uri, { idempotent: true });
+        } catch {
+          // File may already be gone — safe to ignore
+        }
+      }
+    }
+  }
 }
 
 export async function updatePhotoAnnotations(
@@ -655,7 +688,9 @@ export async function updatePhotoAnnotations(
 ): Promise<void> {
   const database = getDatabase();
   await database.runAsync(
-    `UPDATE photos SET annotations_json = ?, annotated_uri = ?, sync_status = 'pending' WHERE id = ?`,
+    `UPDATE photos SET annotations_json = ?, annotated_uri = ?,
+     sync_status = CASE WHEN sync_status IN ('captured', 'processing') THEN sync_status ELSE 'pending' END
+     WHERE id = ?`,
     [annotationsJson, annotatedUri, id]
   );
 }
@@ -668,7 +703,9 @@ export async function updatePhotoMeasurements(
 ): Promise<void> {
   const database = getDatabase();
   await database.runAsync(
-    `UPDATE photos SET measurements_json = ?, calibration_json = ?, measured_uri = ?, sync_status = 'pending' WHERE id = ?`,
+    `UPDATE photos SET measurements_json = ?, calibration_json = ?, measured_uri = ?,
+     sync_status = CASE WHEN sync_status IN ('captured', 'processing') THEN sync_status ELSE 'pending' END
+     WHERE id = ?`,
     [measurementsJson, calibrationJson, measuredUri, id]
   );
 }
@@ -699,7 +736,7 @@ export async function updatePhotoClassification(
   }
 ): Promise<void> {
   const database = getDatabase();
-  const sets: string[] = ["sync_status = 'pending'"];
+  const sets: string[] = ["sync_status = CASE WHEN sync_status IN ('captured', 'processing') THEN sync_status ELSE 'pending' END"];
   const values: (string | null)[] = [];
 
   if (updates.photoType !== undefined) {
@@ -737,7 +774,9 @@ export async function updatePhotoClassification(
 export async function updatePhotoDefectId(photoId: string, defectId: string): Promise<void> {
   const database = getDatabase();
   await database.runAsync(
-    "UPDATE photos SET defect_id = ?, sync_status = 'pending' WHERE id = ?",
+    `UPDATE photos SET defect_id = ?,
+     sync_status = CASE WHEN sync_status IN ('captured', 'processing') THEN sync_status ELSE 'pending' END
+     WHERE id = ?`,
     [defectId, photoId]
   );
 }
@@ -749,7 +788,9 @@ export async function linkPhotosToDefect(photoIds: string[], defectId: string): 
   const database = getDatabase();
   for (const photoId of photoIds) {
     await database.runAsync(
-      "UPDATE photos SET defect_id = ?, sync_status = 'pending' WHERE id = ?",
+      `UPDATE photos SET defect_id = ?,
+       sync_status = CASE WHEN sync_status IN ('captured', 'processing') THEN sync_status ELSE 'pending' END
+       WHERE id = ?`,
       [defectId, photoId]
     );
   }
@@ -853,7 +894,24 @@ export async function getVoiceNotesForDefect(defectId: string): Promise<LocalVoi
 
 export async function deleteVoiceNote(id: string): Promise<void> {
   const database = getDatabase();
+
+  // Fetch file path before deleting DB row
+  const row = await database.getFirstAsync<Record<string, unknown>>(
+    "SELECT local_uri FROM voice_notes WHERE id = ?",
+    [id]
+  );
+
   await database.runAsync("DELETE FROM voice_notes WHERE id = ?", [id]);
+
+  // Clean up physical file
+  if (row?.local_uri) {
+    try {
+      const info = await FileSystem.getInfoAsync(row.local_uri as string);
+      if (info.exists) await FileSystem.deleteAsync(row.local_uri as string, { idempotent: true });
+    } catch {
+      // File may already be gone
+    }
+  }
 }
 
 export async function updateVoiceNoteTranscription(
@@ -986,7 +1044,29 @@ export async function getVideoById(id: string): Promise<LocalVideo | null> {
 
 export async function deleteVideo(id: string): Promise<void> {
   const database = getDatabase();
+
+  // Fetch file paths before deleting DB row
+  const row = await database.getFirstAsync<Record<string, unknown>>(
+    "SELECT local_uri, thumbnail_uri FROM videos WHERE id = ?",
+    [id]
+  );
+
   await database.runAsync("DELETE FROM videos WHERE id = ?", [id]);
+
+  // Clean up physical files
+  if (row) {
+    const uris = [row.local_uri as string | null, row.thumbnail_uri as string | null];
+    for (const uri of uris) {
+      if (uri) {
+        try {
+          const info = await FileSystem.getInfoAsync(uri);
+          if (info.exists) await FileSystem.deleteAsync(uri, { idempotent: true });
+        } catch {
+          // File may already be gone
+        }
+      }
+    }
+  }
 }
 
 export async function updateVideoMetadata(
@@ -996,7 +1076,9 @@ export async function updateVideoMetadata(
 ): Promise<void> {
   const database = getDatabase();
   await database.runAsync(
-    "UPDATE videos SET title = ?, description = ?, sync_status = 'pending' WHERE id = ?",
+    `UPDATE videos SET title = ?, description = ?,
+     sync_status = CASE WHEN sync_status IN ('draft', 'processing') THEN sync_status ELSE 'pending' END
+     WHERE id = ?`,
     [title, description, id]
   );
 }
@@ -1035,7 +1117,7 @@ function mapVideoRow(row: Record<string, unknown>): LocalVideo {
 export async function getPendingUploadVideos(): Promise<LocalVideo[]> {
   const database = getDatabase();
   const results = await database.getAllAsync<Record<string, unknown>>(
-    `SELECT * FROM videos WHERE sync_status IN ('draft', 'processing', 'error') ORDER BY created_at ASC`
+    `SELECT * FROM videos WHERE sync_status IN ('draft', 'processing', 'pending', 'error') AND uploaded_url IS NULL ORDER BY created_at ASC`
   );
   return results.map(mapVideoRow);
 }

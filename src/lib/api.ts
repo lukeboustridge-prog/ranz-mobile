@@ -5,11 +5,15 @@
 
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from "axios";
 import { getToken as getAuthToken } from "./auth/storage";
+import { isTokenExpired, getTokenRemainingSeconds } from "./auth/offline-verify";
+import { refreshToken } from "./auth/api";
+import { saveToken } from "./auth/storage";
 import { config, envLog, envWarn } from "../config/environment";
 import type { ApiResponse, BootstrapResponse, Report, ReportSummary } from "../types/shared";
 
 // API Configuration - uses centralized environment config
 const API_TIMEOUT = 30000; // 30 seconds
+const TOKEN_REFRESH_THRESHOLD_SECONDS = 30 * 60; // Attempt refresh when <30 min remaining
 
 // Create axios instance with environment-aware base URL
 const apiClient: AxiosInstance = axios.create({
@@ -23,11 +27,96 @@ const apiClient: AxiosInstance = axios.create({
 // Log API configuration on initialization (only in development/preview)
 envLog(`API client initialized with baseURL: ${config.apiUrl}`);
 
-// Request interceptor to add auth token
+// ============================================
+// 401 UNAUTHORIZED CALLBACK
+// ============================================
+
+/**
+ * Callback invoked when a 401 response is received.
+ * Set by the app initialization to trigger auth store logout.
+ * Uses a callback to avoid circular dependency with auth-store.
+ */
+let _onUnauthorized: (() => void) | null = null;
+let _handling401 = false;
+
+export function setOnUnauthorized(callback: () => void): void {
+  _onUnauthorized = callback;
+}
+
+// ============================================
+// TOKEN REFRESH LOGIC
+// ============================================
+
+let _isRefreshing = false;
+let _refreshPromise: Promise<string | null> | null = null;
+
+/**
+ * Attempt to refresh token if it's close to expiry.
+ * Deduplicates concurrent refresh attempts.
+ */
+async function maybeRefreshToken(token: string): Promise<string> {
+  const remaining = getTokenRemainingSeconds(token);
+
+  // Token still has plenty of time — use as-is
+  if (remaining > TOKEN_REFRESH_THRESHOLD_SECONDS) {
+    return token;
+  }
+
+  // Token expired — can't refresh
+  if (remaining <= 0) {
+    return token;
+  }
+
+  // Deduplicate concurrent refresh attempts
+  if (_isRefreshing && _refreshPromise) {
+    const refreshed = await _refreshPromise;
+    return refreshed || token;
+  }
+
+  _isRefreshing = true;
+  _refreshPromise = refreshToken(token);
+
+  try {
+    const newToken = await _refreshPromise;
+    if (newToken) {
+      await saveToken(newToken);
+      envLog("[API] Token refreshed successfully");
+      return newToken;
+    }
+    // Refresh failed (endpoint may not exist yet) — continue with current token
+    return token;
+  } catch {
+    // Refresh failed — continue with current token until it truly expires
+    return token;
+  } finally {
+    _isRefreshing = false;
+    _refreshPromise = null;
+  }
+}
+
+// ============================================
+// INTERCEPTORS
+// ============================================
+
+// Request interceptor: add auth token + attempt refresh if near expiry
 apiClient.interceptors.request.use(
   async (config) => {
-    const token = await getAuthToken();
+    let token = await getAuthToken();
     if (token) {
+      // Check if token is already expired before making request
+      if (isTokenExpired(token)) {
+        envWarn("[API] Token expired before request — triggering logout");
+        if (_onUnauthorized && !_handling401) {
+          _handling401 = true;
+          _onUnauthorized();
+          // Reset after short delay to allow re-login
+          setTimeout(() => { _handling401 = false; }, 5000);
+        }
+        return Promise.reject(new axios.Cancel("Token expired"));
+      }
+
+      // Attempt proactive refresh if nearing expiry
+      token = await maybeRefreshToken(token);
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -37,13 +126,18 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
+// Response interceptor: handle 401 by triggering logout
 apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      // Token expired or invalid - trigger re-auth
-      envWarn("Unauthorized - token may be expired");
+    if (error.response?.status === 401 && !_handling401) {
+      envWarn("[API] 401 Unauthorized — clearing auth state");
+      _handling401 = true;
+      if (_onUnauthorized) {
+        _onUnauthorized();
+      }
+      // Reset after short delay to allow re-login
+      setTimeout(() => { _handling401 = false; }, 5000);
     }
     return Promise.reject(error);
   }
@@ -345,4 +439,4 @@ export async function withRetry<T>(
 }
 
 // Export the raw client for advanced use cases
-export { apiClient };
+export { apiClient, apiClient as api };

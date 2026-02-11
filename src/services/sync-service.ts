@@ -653,17 +653,37 @@ class SyncEngine {
         });
 
         let videosSynced = 0;
-        for (let i = 0; i < pendingVideos.length; i++) {
-          const video = pendingVideos[i];
-          const uploaded = await this.uploadVideo(video);
-          if (uploaded) {
-            videosSynced++;
+        let videoIndex = 0;
+        for (const video of pendingVideos) {
+          videoIndex++;
+          try {
+            const uploaded = await this.uploadVideo(video);
+            if (uploaded) {
+              videosSynced++;
+            } else {
+              errors.push({
+                code: "VIDEO_UPLOAD_FAILED",
+                message: `Video ${video.id} upload failed`,
+                entityType: "video",
+                entityId: video.id,
+                retryable: true,
+              });
+            }
+          } catch (error) {
+            console.error(`[Sync] Failed to upload video ${video.id}:`, error);
+            errors.push({
+              code: "VIDEO_UPLOAD_FAILED",
+              message: error instanceof Error ? error.message : "Video upload failed",
+              entityType: "video",
+              entityId: video.id,
+              retryable: true,
+            });
           }
           this.emitDetailedProgress({
-            status: `Uploading video ${i + 1} of ${totalVideos}`,
-            progress: 85 + Math.round(((i + 1) / totalVideos) * 5),
+            status: `Uploading video ${videoIndex} of ${totalVideos}`,
+            progress: 85 + Math.round((videoIndex / totalVideos) * 5),
             phase: 'uploading_videos',
-            currentItem: i + 1,
+            currentItem: videoIndex,
             totalItems: totalVideos,
             itemType: 'video',
           });
@@ -675,10 +695,39 @@ class SyncEngine {
       if (pendingVoiceNotes.length > 0) {
         const totalVoiceNotes = pendingVoiceNotes.length;
         this.emitProgress(`Uploading ${totalVoiceNotes} voice notes...`, 92);
+        let voiceNoteIndex = 0;
 
-        for (let i = 0; i < pendingVoiceNotes.length; i++) {
-          const voiceNote = pendingVoiceNotes[i];
-          await this.uploadVoiceNote(voiceNote);
+        for (const voiceNote of pendingVoiceNotes) {
+          voiceNoteIndex++;
+          try {
+            const uploaded = await this.uploadVoiceNote(voiceNote);
+            if (!uploaded) {
+              errors.push({
+                code: "VOICE_NOTE_UPLOAD_FAILED",
+                message: `Voice note ${voiceNote.id} upload failed`,
+                entityType: "voice_note",
+                entityId: voiceNote.id,
+                retryable: true,
+              });
+            }
+          } catch (error) {
+            console.error(`[Sync] Failed to upload voice note ${voiceNote.id}:`, error);
+            errors.push({
+              code: "VOICE_NOTE_UPLOAD_FAILED",
+              message: error instanceof Error ? error.message : "Voice note upload failed",
+              entityType: "voice_note",
+              entityId: voiceNote.id,
+              retryable: true,
+            });
+          }
+          this.emitDetailedProgress({
+            status: `Uploading voice note ${voiceNoteIndex} of ${totalVoiceNotes}`,
+            progress: 92 + Math.round((voiceNoteIndex / totalVoiceNotes) * 2),
+            phase: 'uploading_voice_notes',
+            currentItem: voiceNoteIndex,
+            totalItems: totalVoiceNotes,
+            itemType: 'voice_note',
+          });
         }
       }
 
@@ -783,7 +832,7 @@ class SyncEngine {
       sortOrder: p.sortOrder,
       defectId: p.defectId,
       roofElementId: p.roofElementId,
-      needsUpload: p.syncStatus === "captured" || p.syncStatus === "processing",
+      needsUpload: !p.uploadedUrl && (p.syncStatus === "captured" || p.syncStatus === "processing" || p.syncStatus === "pending"),
       clientUpdatedAt: p.createdAt,
     }));
 

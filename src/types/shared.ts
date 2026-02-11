@@ -474,7 +474,7 @@ export interface SyncQueueItem {
 
 export type SyncStatus = "draft" | "pending" | "processing" | "synced" | "error";
 
-export type PhotoSyncStatus = "captured" | "processing" | "uploaded" | "synced" | "error";
+export type PhotoSyncStatus = "captured" | "pending" | "processing" | "uploaded" | "synced" | "error";
 
 // ============================================
 // SYNC UPLOAD TYPES (match server endpoint)

@@ -118,9 +118,9 @@ export function PreSubmitChecklist({
       setError(null);
 
       const response = await api.get(`/reports/${reportId}/submit`);
-      setValidation(response.validation);
+      setValidation(response.data.validation);
       if (onValidationChange) {
-        onValidationChange(response.validation);
+        onValidationChange(response.data.validation);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load checklist");

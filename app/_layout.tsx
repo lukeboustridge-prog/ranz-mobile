@@ -9,6 +9,7 @@ import { View, ActivityIndicator, StyleSheet, AppState, AppStateStatus, Text } f
 import { initializeDatabase } from "../src/lib/sqlite";
 import { appLogger } from "../src/lib/logger";
 import { useAuthStore } from "../src/stores/auth-store";
+import { setOnUnauthorized } from "../src/lib/api";
 
 /**
  * Auth Guard Component
@@ -22,6 +23,12 @@ function AuthGuard() {
 
   // Initialize auth on mount with hard 5-second safety valve
   useEffect(() => {
+    // Wire up 401 handler: when any API call returns 401, trigger logout
+    setOnUnauthorized(() => {
+      console.warn("[AuthGuard] 401 received — logging out");
+      useAuthStore.getState().logout();
+    });
+
     initialize();
 
     // Absolute safety valve: force loading to stop after 5 seconds no matter what

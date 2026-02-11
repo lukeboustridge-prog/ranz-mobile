@@ -80,8 +80,8 @@ export async function loginWithCredentials(
     // The web app returns accessToken in response body for mobile clients
     return {
       success: true,
-      token: data.accessToken,
-      mustChangePassword: data.mustChangePassword,
+      token: data.accessToken as string | undefined,
+      mustChangePassword: data.mustChangePassword as boolean | undefined,
     };
   } catch (error) {
     console.error('[AuthAPI] Login request failed:', error);

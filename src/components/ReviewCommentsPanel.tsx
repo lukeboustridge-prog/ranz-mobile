@@ -105,8 +105,8 @@ export function ReviewCommentsPanel({
   const fetchComments = useCallback(async () => {
     try {
       const response = await api.get(`/reports/${reportId}/comments`);
-      setComments(response.comments || []);
-      setSummary(response.summary || null);
+      setComments(response.data.comments || []);
+      setSummary(response.data.summary || null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load comments");
