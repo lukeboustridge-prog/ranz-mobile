@@ -19,6 +19,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useLocalDB } from "../../../src/hooks/useLocalDB";
 import { ChipSelector } from "../../../src/components/ChipSelector";
 import { FormSection } from "../../../src/components/FormSection";
+import { VoiceNoteRecorder } from "../../../src/components/VoiceNoteRecorder";
 import type { LocalRoofElement } from "../../../src/types/database";
 import { ElementType, ConditionRating } from "../../../src/types/shared";
 
@@ -329,6 +330,11 @@ export default function EditElementScreen() {
               textAlignVertical="top"
             />
           </View>
+        </FormSection>
+
+        {/* Voice Notes */}
+        <FormSection title="Voice Notes">
+          <VoiceNoteRecorder reportId={reportId!} roofElementId={id} showList={true} />
         </FormSection>
 
         {/* Save Button */}

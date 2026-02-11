@@ -14,7 +14,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useLocalDB } from "../../../src/hooks/useLocalDB";
-import type { LocalReport, LocalPhoto, LocalDefect, LocalRoofElement } from "../../../src/types/database";
+import { VoiceNoteRecorder } from "../../../src/components/VoiceNoteRecorder";
+import type { LocalReport, LocalPhoto, LocalDefect, LocalRoofElement, LocalVideo, LocalVoiceNote } from "../../../src/types/database";
 
 export default function ReportDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,6 +26,8 @@ export default function ReportDetailScreen() {
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [defects, setDefects] = useState<LocalDefect[]>([]);
   const [elements, setElements] = useState<LocalRoofElement[]>([]);
+  const [videos, setVideos] = useState<LocalVideo[]>([]);
+  const [voiceNotes, setVoiceNotes] = useState<LocalVoiceNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -41,14 +44,19 @@ export default function ReportDetailScreen() {
       setReport(loadedReport);
 
       if (loadedReport) {
-        const [loadedPhotos, loadedDefects, loadedElements] = await Promise.all([
+        const sqlite = await import("../../../src/lib/sqlite");
+        const [loadedPhotos, loadedDefects, loadedElements, loadedVideos, loadedVoiceNotes] = await Promise.all([
           getPhotos(id!),
           getDefects(id!),
           getRoofElements(id!),
+          sqlite.getVideosForReport(id!),
+          sqlite.getVoiceNotesForReport(id!),
         ]);
         setPhotos(loadedPhotos);
         setDefects(loadedDefects);
         setElements(loadedElements);
+        setVideos(loadedVideos);
+        setVoiceNotes(loadedVoiceNotes);
       }
     } catch (error) {
       console.error("Failed to load report:", error);
@@ -179,6 +187,17 @@ export default function ReportDetailScreen() {
         </View>
       </View>
 
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{videos.length}</Text>
+          <Text style={styles.statLabel}>Videos</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{voiceNotes.length}</Text>
+          <Text style={styles.statLabel}>Voice Notes</Text>
+        </View>
+      </View>
+
       {/* Property Details */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Property Details</Text>
@@ -295,6 +314,21 @@ export default function ReportDetailScreen() {
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => router.push({
+            pathname: "/(main)/video-capture",
+            params: { reportId: id || "" }
+          } as any)}
+        >
+          <Text style={styles.actionIcon}>🎥</Text>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>Record Video</Text>
+            <Text style={styles.actionSubtitle}>{videos.length} video{videos.length !== 1 ? "s" : ""} recorded</Text>
+          </View>
+          <Text style={styles.actionArrow}>→</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => router.push({
             pathname: "/(main)/compliance/[reportId]",
             params: { reportId: id || "" }
           } as any)}
@@ -306,6 +340,12 @@ export default function ReportDetailScreen() {
           </View>
           <Text style={styles.actionArrow}>→</Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Voice Notes */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Voice Notes</Text>
+        <VoiceNoteRecorder reportId={id!} showList={true} />
       </View>
 
       {/* Edit Button */}

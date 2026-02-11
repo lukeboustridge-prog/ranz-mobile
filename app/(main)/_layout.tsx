@@ -17,6 +17,7 @@ export default function MainLayout() {
       <Stack.Screen name="new-report" />
       <Stack.Screen name="report-detail/[id]" />
       <Stack.Screen name="photo-capture" />
+      <Stack.Screen name="video-capture" />
       <Stack.Screen name="compliance-assessment" />
       <Stack.Screen name="compliance/[reportId]" />
       <Stack.Screen name="defects/index" />

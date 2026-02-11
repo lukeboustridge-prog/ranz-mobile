@@ -20,6 +20,7 @@ import { useLocalDB } from "../../../src/hooks/useLocalDB";
 import { ChipSelector } from "../../../src/components/ChipSelector";
 import { FormSection } from "../../../src/components/FormSection";
 import { PhotoGrid } from "../../../src/components/PhotoGrid";
+import { VoiceNoteRecorder } from "../../../src/components/VoiceNoteRecorder";
 import type { LocalDefect, LocalRoofElement, LocalPhoto } from "../../../src/types/database";
 import { DefectClass, DefectSeverity, PriorityLevel } from "../../../src/types/shared";
 
@@ -206,11 +207,10 @@ export default function EditDefectScreen() {
   };
 
   const handleAddPhoto = () => {
-    Alert.alert(
-      "Add Photo",
-      "To add photos, go back to the report and use the Photo Capture feature.",
-      [{ text: "OK" }]
-    );
+    router.push({
+      pathname: "/(main)/photo-capture",
+      params: { reportId: reportId || "", defectId: id || "" }
+    } as any);
   };
 
   if (isLoading) {
@@ -434,6 +434,25 @@ export default function EditDefectScreen() {
           />
         </FormSection>
 
+        {/* Voice Notes */}
+        <FormSection title="Voice Notes">
+          <VoiceNoteRecorder reportId={reportId!} defectId={id} showList={true} />
+        </FormSection>
+
+        {/* Video Evidence */}
+        <FormSection title="Video Evidence">
+          <TouchableOpacity
+            style={styles.videoButton}
+            onPress={() => router.push({
+              pathname: "/(main)/video-capture",
+              params: { reportId: reportId || "", defectId: id || "" }
+            } as any)}
+          >
+            <Text style={styles.videoButtonIcon}>🎥</Text>
+            <Text style={styles.videoButtonText}>Record Video</Text>
+          </TouchableOpacity>
+        </FormSection>
+
         {/* Save Button */}
         <TouchableOpacity
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
@@ -564,6 +583,23 @@ const styles = StyleSheet.create({
   },
   elementChipTextActive: {
     color: "#ffffff",
+    fontWeight: "600",
+  },
+  videoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3c4b5d",
+    borderRadius: 8,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  videoButtonIcon: {
+    fontSize: 18,
+  },
+  videoButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
     fontWeight: "600",
   },
   saveButton: {
