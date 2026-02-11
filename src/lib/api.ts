@@ -3,7 +3,7 @@
  * HTTP client for backend communication with Clerk auth integration
  */
 
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from "axios";
+import axios, { AxiosInstance, AxiosError } from "axios";
 import { getToken as getAuthToken } from "./auth/storage";
 import { isTokenExpired, getTokenRemainingSeconds } from "./auth/offline-verify";
 import { refreshToken } from "./auth/api";
@@ -112,7 +112,7 @@ apiClient.interceptors.request.use(
           // Reset after short delay to allow re-login
           setTimeout(() => { _handling401 = false; }, 5000);
         }
-        return Promise.reject(new axios.Cancel("Token expired"));
+        return Promise.reject(new Error("Token expired"));
       }
 
       // Attempt proactive refresh if nearing expiry
