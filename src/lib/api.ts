@@ -100,7 +100,7 @@ async function maybeRefreshToken(token: string): Promise<string> {
 
 // Request interceptor: add auth token + attempt refresh if near expiry
 apiClient.interceptors.request.use(
-  async (config) => {
+  async (reqConfig) => {
     let token = await getAuthToken();
     if (token) {
       // Check if token is already expired before making request
@@ -117,9 +117,9 @@ apiClient.interceptors.request.use(
 
       // Attempt proactive refresh if nearing expiry
       token = await maybeRefreshToken(token);
-      config.headers.Authorization = `Bearer ${token}`;
+      reqConfig.headers.Authorization = `Bearer ${token}`;
     }
-    return config;
+    return reqConfig;
   },
   (error) => {
     return Promise.reject(error);
