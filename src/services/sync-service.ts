@@ -66,7 +66,8 @@ import type {
   LocalVoiceNote,
   LocalComplianceAssessment,
 } from "../types/database";
-import { uploadWithResume, shouldUseChunkedUpload } from "../lib/chunked-upload";
+// TUS chunked upload removed — all videos now use presigned URL flow
+// import { uploadWithResume, shouldUseChunkedUpload } from "../lib/chunked-upload";
 import { logSync as logCustodySync } from "./chain-of-custody";
 import { verifySyncedEvidence } from "./evidence-service";
 import type {
@@ -1132,7 +1133,8 @@ class SyncEngine {
   }
 
   /**
-   * Upload video using chunked upload for large files
+   * Upload video using presigned URL
+   * All videos use the presigned URL flow — R2 supports large file uploads natively.
    */
   private async uploadVideo(video: LocalVideo): Promise<boolean> {
     try {
@@ -1147,137 +1149,77 @@ class SyncEngine {
       await updateVideoSyncStatus(video.id, "processing");
 
       const fileSize = (fileInfo as { size: number }).size;
+      console.log(`[Sync] Uploading video ${video.id} (${(fileSize / 1024 / 1024).toFixed(1)}MB) via presigned URL`);
 
-      // Determine upload method based on file size
-      if (shouldUseChunkedUpload(fileSize)) {
-        // Use chunked upload for large files
-        console.log(`[Sync] Using chunked upload for video ${video.id} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
-
-        const result = await uploadWithResume({
-          fileUri: video.localUri,
-          endpoint: `${process.env.EXPO_PUBLIC_API_URL || ""}/api/upload/video`,
-          metadata: {
-            filename: video.filename,
-            originalHash: video.originalHash || "",
-            reportId: video.reportId,
-            videoId: video.id,
-          },
-          onProgress: (bytesUploaded, bytesTotal) => {
-            const percent = Math.round((bytesUploaded / bytesTotal) * 100);
-            console.log(`[Sync] Video ${video.id}: ${percent}% uploaded`);
-          },
-        });
-
-        if (result.success && result.url) {
-          await updateVideoSyncStatus(video.id, "synced", result.url);
-
-          // Log chain of custody SYNCED event
-          try {
-            const { userId, userName } = await this.getCurrentUser();
-            await logCustodySync(
-              "video",
-              video.id,
-              userId,
-              userName,
-              video.originalHash || "",
-              result.url
-            );
-            console.log(`[Sync] Logged SYNCED custody event for video ${video.id}`);
-          } catch (custodyError) {
-            console.warn(`[Sync] Failed to log custody event for video ${video.id}:`, custodyError);
-          }
-
-          // Verify evidence integrity after sync (for videos with originalHash)
-          if (video.originalHash) {
-            try {
-              const verification = await verifySyncedEvidence(
-                'video',
-                video.id,
-                video.originalHash,
-                video.localUri
-              );
-              if (!verification.isValid) {
-                console.error(`[Sync] Video ${video.id} failed post-sync verification: ${verification.error}`);
-              }
-            } catch (verifyError) {
-              console.warn(`[Sync] Could not verify video ${video.id} after sync:`, verifyError);
-            }
-          }
-
-          return true;
-        } else {
-          await updateVideoSyncStatus(video.id, "error", undefined, result.error || "Upload failed");
-          return false;
+      // Request presigned URL from server
+      const presignedResponse = await apiClient.post<{ uploadUrl: string; publicUrl: string }>(
+        "/api/upload/video/presign",
+        {
+          videoId: video.id,
+          filename: video.filename,
+          mimeType: video.mimeType,
+          fileSize,
+          originalHash: video.originalHash,
+          reportId: video.reportId,
         }
+      );
+
+      if (!presignedResponse.data.uploadUrl) {
+        throw new Error("Failed to get presigned URL");
+      }
+
+      console.log(`[Sync] Got presigned URL for video ${video.id}, uploading to R2...`);
+
+      const uploadResult = await FileSystem.uploadAsync(
+        presignedResponse.data.uploadUrl,
+        video.localUri,
+        {
+          httpMethod: "PUT",
+          headers: { "Content-Type": video.mimeType },
+          uploadType: FileSystemUploadType.BINARY_CONTENT,
+        }
+      );
+
+      if (uploadResult.status >= 200 && uploadResult.status < 300) {
+        await updateVideoSyncStatus(video.id, "synced", presignedResponse.data.publicUrl);
+        console.log(`[Sync] Video ${video.id} uploaded successfully`);
+
+        // Log chain of custody SYNCED event
+        try {
+          const { userId, userName } = await this.getCurrentUser();
+          await logCustodySync(
+            "video",
+            video.id,
+            userId,
+            userName,
+            video.originalHash || "",
+            presignedResponse.data.publicUrl
+          );
+          console.log(`[Sync] Logged SYNCED custody event for video ${video.id}`);
+        } catch (custodyError) {
+          console.warn(`[Sync] Failed to log custody event for video ${video.id}:`, custodyError);
+        }
+
+        // Verify evidence integrity after sync (for videos with originalHash)
+        if (video.originalHash) {
+          try {
+            const verification = await verifySyncedEvidence(
+              'video',
+              video.id,
+              video.originalHash,
+              video.localUri
+            );
+            if (!verification.isValid) {
+              console.error(`[Sync] Video ${video.id} failed post-sync verification: ${verification.error}`);
+            }
+          } catch (verifyError) {
+            console.warn(`[Sync] Could not verify video ${video.id} after sync:`, verifyError);
+          }
+        }
+
+        return true;
       } else {
-        // Use direct upload for smaller files (existing pattern)
-        // Request presigned URL from server
-        const presignedResponse = await apiClient.post<{ uploadUrl: string; publicUrl: string }>(
-          "/api/upload/video/presign",
-          {
-            videoId: video.id,
-            filename: video.filename,
-            mimeType: video.mimeType,
-            fileSize,
-            originalHash: video.originalHash,
-            reportId: video.reportId,
-          }
-        );
-
-        if (!presignedResponse.data.uploadUrl) {
-          throw new Error("Failed to get presigned URL");
-        }
-
-        const uploadResult = await FileSystem.uploadAsync(
-          presignedResponse.data.uploadUrl,
-          video.localUri,
-          {
-            httpMethod: "PUT",
-            headers: { "Content-Type": video.mimeType },
-            uploadType: FileSystemUploadType.BINARY_CONTENT,
-          }
-        );
-
-        if (uploadResult.status >= 200 && uploadResult.status < 300) {
-          await updateVideoSyncStatus(video.id, "synced", presignedResponse.data.publicUrl);
-
-          // Log chain of custody SYNCED event
-          try {
-            const { userId, userName } = await this.getCurrentUser();
-            await logCustodySync(
-              "video",
-              video.id,
-              userId,
-              userName,
-              video.originalHash || "",
-              presignedResponse.data.publicUrl
-            );
-            console.log(`[Sync] Logged SYNCED custody event for video ${video.id}`);
-          } catch (custodyError) {
-            console.warn(`[Sync] Failed to log custody event for video ${video.id}:`, custodyError);
-          }
-
-          // Verify evidence integrity after sync (for videos with originalHash)
-          if (video.originalHash) {
-            try {
-              const verification = await verifySyncedEvidence(
-                'video',
-                video.id,
-                video.originalHash,
-                video.localUri
-              );
-              if (!verification.isValid) {
-                console.error(`[Sync] Video ${video.id} failed post-sync verification: ${verification.error}`);
-              }
-            } catch (verifyError) {
-              console.warn(`[Sync] Could not verify video ${video.id} after sync:`, verifyError);
-            }
-          }
-
-          return true;
-        } else {
-          throw new Error(`Upload failed with status ${uploadResult.status}`);
-        }
+        throw new Error(`Upload failed with status ${uploadResult.status}: ${uploadResult.body?.slice(0, 200)}`);
       }
     } catch (error) {
       console.error(`[Sync] Video upload failed for ${video.id}:`, error);
